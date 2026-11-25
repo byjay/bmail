@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { AiProviderId } from '../types/mail';
 import { selectClaudeModelByComplexity, type ClaudeRoutingInput } from './claudeModelRouter';
-import { recordLlmUsageEvent } from './llmUsageTracker';
+import { getLlmUsageLimits, recordLlmUsageEvent } from './llmUsageTracker';
 
 export const GROQ_CHAT_COMPLETIONS_URL = 'https://api.groq.com/openai/v1/chat/completions';
 export const DEFAULT_GROQ_MODEL = 'openai/gpt-oss-120b';
@@ -125,19 +125,20 @@ export function collectGroqApiKeys(
     }
   }
 
-  // Also load simple key-per-line file (`groq-keys.txt`) unless unit test passed isolated envOverrides without file override
+  // Also load simple key-per-line/comma file (`groq-keys.txt`) unless envOverrides or BMAIL_GROQ_KEYS_FILE overrides it
   const candidateFiles = envOverrides
     ? [envOverrides.BMAIL_GROQ_KEYS_FILE].filter((p): p is string => Boolean(p))
-    : Array.from(
-        new Set(
-          [
-            envSource.BMAIL_GROQ_KEYS_FILE,
-            envSource.BMAIL_DATA_DIR ? path.join(envSource.BMAIL_DATA_DIR, 'groq-keys.txt') : '',
-            path.join(process.cwd(), 'groq-keys.txt'),
-            envSource.BMAIL_APP_ROOT ? path.join(envSource.BMAIL_APP_ROOT, 'groq-keys.txt') : '',
-          ].filter((p): p is string => Boolean(p))
-        )
-      );
+    : envSource.BMAIL_GROQ_KEYS_FILE
+      ? [envSource.BMAIL_GROQ_KEYS_FILE]
+      : Array.from(
+          new Set(
+            [
+              envSource.BMAIL_DATA_DIR ? path.join(envSource.BMAIL_DATA_DIR, 'groq-keys.txt') : '',
+              path.join(process.cwd(), 'groq-keys.txt'),
+              envSource.BMAIL_APP_ROOT ? path.join(envSource.BMAIL_APP_ROOT, 'groq-keys.txt') : '',
+            ].filter((p): p is string => Boolean(p))
+          )
+        );
 
   for (const filePath of candidateFiles) {
     for (const fileKey of readGroqKeysFromFile(filePath)) {
@@ -167,6 +168,13 @@ export function shouldEscalateToClaude(input: ClaudeEscalationCheckInput = {}): 
   if (input.highPerformance === true) return true;
   const effectiveChars = Number(input.promptChars ?? input.routing?.promptChars ?? 0);
   if (effectiveChars > 18000) return true;
+
+  if (!input.explicitProvider) {
+    const mode = getLlmUsageLimits().claudeAdvancedMode;
+    if (mode === 'claude-only') return true;
+    if (mode === 'groq-only') return false;
+  }
+
   const taskKind = input.routing?.taskKind;
   if (taskKind === 'mail-map' || taskKind === 'quick-summary') {
     // Keep parallel map chunks & quick summaries fast on Groq unless highPerformance/huge prompt
@@ -192,7 +200,7 @@ export function shouldEscalateToClaude(input: ClaudeEscalationCheckInput = {}): 
 
 /**
  * Executes a batch of AI tasks in parallel across up to all configured Groq API key slots
- * (default concurrency = min(items.length, max(1, configuredGroqKeys)), capped at 5).
+ * (default concurrency = min(items.length, configuredGroqKeys, limits.groqParallelMax, 5)).
  */
 export async function runGroqParallelBatch<T, R>(
   items: readonly T[],
@@ -204,9 +212,14 @@ export async function runGroqParallelBatch<T, R>(
 ): Promise<R[]> {
   if (items.length === 0) return [];
   const poolCount = Math.max(1, getGroqKeyPoolStatus(options?.envOverrides).configuredCount);
+  const adminMax = getLlmUsageLimits().groqParallelMax;
   const concurrency = Math.max(
     1,
-    Math.min(items.length, options?.maxConcurrency ?? poolCount, MAX_GROQ_KEY_SLOTS)
+    Math.min(
+      items.length,
+      options?.maxConcurrency ?? Math.min(poolCount, adminMax),
+      MAX_GROQ_KEY_SLOTS
+    )
   );
   const results = new Array<R>(items.length);
   let cursor = 0;

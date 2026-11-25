@@ -7,7 +7,6 @@ import {
   Folder,
   FolderOpen,
   Inbox,
-  RefreshCw,
   Search,
   Send,
   Star,
@@ -226,6 +225,11 @@ export const OutlookStoreFolderTree: React.FC<OutlookStoreFolderTreeProps> = ({
       return a.name.localeCompare(b.name, 'ko');
     });
 
+  const isSystemFolder = (name: string): boolean => {
+    const lower = name.trim().toLowerCase();
+    return Boolean(SYSTEM_FOLDER_ORDER[lower]);
+  };
+
   const renderFolderIcon = (name: string, isOpen: boolean) => {
     const lower = name.toLowerCase();
     if (lower === '받은 편지함' || lower === 'inbox') {
@@ -259,6 +263,7 @@ export const OutlookStoreFolderTree: React.FC<OutlookStoreFolderTreeProps> = ({
     const isActive =
       activeFolderFilter === node.fullPath &&
       (!activeStoreFilter || activeStoreFilter === node.storeName);
+    const showIcon = depth === 0 || isSystemFolder(node.name);
 
     return (
       <div key={nodeKey}>
@@ -294,7 +299,7 @@ export const OutlookStoreFolderTree: React.FC<OutlookStoreFolderTreeProps> = ({
             ) : (
               <span className="w-4 shrink-0" />
             )}
-            {renderFolderIcon(node.name, !isCollapsed && hasChildren)}
+            {showIcon && renderFolderIcon(node.name, !isCollapsed && hasChildren)}
             <span
               className={`truncate ${
                 node.unreadCount > 0 || isActive ? 'font-bold text-[#242424]' : 'font-normal'
@@ -342,33 +347,29 @@ export const OutlookStoreFolderTree: React.FC<OutlookStoreFolderTreeProps> = ({
     );
   };
 
+  const syncTitleHint = onSyncLiveOutlook
+    ? isSyncingLiveOutlook
+      ? 'Outlook 증분 동기화 중...'
+      : '상단 리본에서 신규 메일 증분 동기화를 실행할 수 있습니다'
+    : undefined;
+
   return (
-    <div className="flex flex-col h-full select-none text-[#242424]">
-      {/* Top Folder Quick Filter & Live Outlook Sync Trigger */}
-      <div className="px-2 py-1.5 border-b border-[#E0E0E0] space-y-1.5 shrink-0">
-        <div className="relative flex items-center">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 pointer-events-none" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="폴더 검색 (예: 22K, 선보, 한라)"
-            className="w-full pl-7 pr-2 py-1 text-[11px] bg-white border border-[#D1D1D1] rounded focus:outline-none focus:border-[#0F6CBD]"
-          />
+    <div className="flex flex-col h-full select-none text-[#242424]" title={syncTitleHint}>
+      {/* Compact Folder Quick Filter (shown only when tree has > 12 folders) */}
+      {folders.length > 12 && (
+        <div className="px-2 py-1.5 border-b border-[#E1DFDD] shrink-0">
+          <div className="relative flex items-center">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2 pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="폴더 검색 (예: 22K, 선보)"
+              className="w-full pl-7 pr-2 py-1 text-[11px] bg-white border border-[#E1DFDD] rounded-[3px] focus:outline-none focus:border-[#0F6CBD]"
+            />
+          </div>
         </div>
-        {onSyncLiveOutlook && (
-          <button
-            type="button"
-            disabled={isSyncingLiveOutlook}
-            onClick={onSyncLiveOutlook}
-            title="1회 불러온 데이터를 유지하고 신규 도착 메일 및 실시간 Outlook 설정(즐겨찾기/미읽음)만 증분 업데이트합니다"
-            className="w-full py-1 px-2 rounded bg-[#EBF3FC] hover:bg-[#CFE4FA] text-[#0F6CBD] text-[11px] font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-60"
-          >
-            <RefreshCw className={`w-3 h-3 ${isSyncingLiveOutlook ? 'animate-spin' : ''}`} />
-            <span>{isSyncingLiveOutlook ? 'Outlook 증분 동기화 중...' : '신규 메일 증분 동기화'}</span>
-          </button>
-        )}
-      </div>
+      )}
 
       {/* Scrollable Classic Outlook Tree */}
       <div className="flex-1 overflow-y-auto py-1.5 px-1 space-y-2">

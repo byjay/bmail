@@ -59,6 +59,47 @@ export interface LlmDailyUsageBucket {
   costUsd: number;
 }
 
+export interface LlmUsageLimits {
+  dailyCallLimit: number;
+  dailyTokenLimit: number;
+  monthlyCostBudgetUsd: number;
+  warningThresholdPct: number;
+  criticalThresholdPct: number;
+  groqParallelMax: number;
+  claudeAdvancedMode: 'auto' | 'claude-only' | 'groq-only';
+  updatedAt: string;
+}
+
+export type BudgetAlertLevel = 'ok' | 'warning' | 'critical';
+
+export interface LlmUsageBudgetStatus {
+  month: string;
+  dailyCallsUsed: number;
+  dailyCallsLimit: number;
+  dailyCallsPct: number;
+  dailyCallsLevel: BudgetAlertLevel;
+  dailyTokensUsed: number;
+  dailyTokensLimit: number;
+  dailyTokensPct: number;
+  dailyTokensLevel: BudgetAlertLevel;
+  monthlyCostUsd: number;
+  monthlyCostBudgetUsd: number;
+  monthlyCostPct: number;
+  monthlyCostLevel: BudgetAlertLevel;
+  overallStatus: BudgetAlertLevel;
+}
+
+export const DEFAULT_LLM_USAGE_LIMITS: LlmUsageLimits = {
+  dailyCallLimit: 300,
+  dailyTokenLimit: 500_000,
+  monthlyCostBudgetUsd: 15,
+  warningThresholdPct: 75,
+  criticalThresholdPct: 95,
+  groqParallelMax: 5,
+  claudeAdvancedMode: 'auto',
+  updatedAt: '',
+};
+
 export interface LlmUsageSummary {
   updatedAt: string;
   totals: {
@@ -143,6 +184,153 @@ let globalUsageFilePath = path.resolve(
 );
 
 let cachedEvents: LlmUsageEventRecord[] | null = null;
+let cachedLimits: LlmUsageLimits | null = null;
+
+function getLimitsFilePath(): string {
+  return path.join(path.dirname(globalUsageFilePath), 'llm-usage-limits.json');
+}
+
+function clampFinite(val: unknown, min: number, max: number, fallback: number, roundInt = false): number {
+  const num = Number(val);
+  if (!Number.isFinite(num)) return fallback;
+  const clamped = Math.max(min, Math.min(max, num));
+  return roundInt ? Math.round(clamped) : Math.round(clamped * 100) / 100;
+}
+
+function sanitizeLimits(
+  raw: Partial<LlmUsageLimits> | null | undefined,
+  base: LlmUsageLimits = DEFAULT_LLM_USAGE_LIMITS
+): LlmUsageLimits {
+  const warningThresholdPct = clampFinite(
+    raw?.warningThresholdPct,
+    10,
+    95,
+    base.warningThresholdPct,
+    true
+  );
+  const criticalThresholdPct = clampFinite(
+    raw?.criticalThresholdPct,
+    Math.min(100, warningThresholdPct + 5),
+    100,
+    Math.max(warningThresholdPct + 5, base.criticalThresholdPct),
+    true
+  );
+  const modeRaw = raw?.claudeAdvancedMode;
+  const claudeAdvancedMode: LlmUsageLimits['claudeAdvancedMode'] =
+    modeRaw === 'claude-only' || modeRaw === 'groq-only' || modeRaw === 'auto'
+      ? modeRaw
+      : base.claudeAdvancedMode;
+
+  return {
+    dailyCallLimit: clampFinite(raw?.dailyCallLimit, 10, 50_000, base.dailyCallLimit, true),
+    dailyTokenLimit: clampFinite(raw?.dailyTokenLimit, 1_000, 50_000_000, base.dailyTokenLimit, true),
+    monthlyCostBudgetUsd: clampFinite(
+      raw?.monthlyCostBudgetUsd,
+      0.5,
+      5_000,
+      base.monthlyCostBudgetUsd,
+      false
+    ),
+    warningThresholdPct,
+    criticalThresholdPct,
+    groqParallelMax: clampFinite(raw?.groqParallelMax, 1, 5, base.groqParallelMax, true),
+    claudeAdvancedMode,
+    updatedAt: typeof raw?.updatedAt === 'string' ? raw.updatedAt : base.updatedAt,
+  };
+}
+
+export function getLlmUsageLimits(): LlmUsageLimits {
+  if (cachedLimits !== null) return cachedLimits;
+  try {
+    const file = getLimitsFilePath();
+    if (fs.existsSync(file)) {
+      const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<LlmUsageLimits>;
+      cachedLimits = sanitizeLimits(parsed, DEFAULT_LLM_USAGE_LIMITS);
+      return cachedLimits;
+    }
+  } catch {
+    // fallback to defaults
+  }
+  cachedLimits = { ...DEFAULT_LLM_USAGE_LIMITS };
+  return cachedLimits;
+}
+
+export function saveLlmUsageLimits(patch: Partial<LlmUsageLimits>): LlmUsageLimits {
+  const current = getLlmUsageLimits();
+  const next = sanitizeLimits(
+    {
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    },
+    current
+  );
+  cachedLimits = next;
+  try {
+    const file = getLimitsFilePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
+  } catch {
+    // Non-fatal in ephemeral environments
+  }
+  return next;
+}
+
+function classifyPct(pct: number, limits: LlmUsageLimits): BudgetAlertLevel {
+  if (pct >= limits.criticalThresholdPct) return 'critical';
+  if (pct >= limits.warningThresholdPct) return 'warning';
+  return 'ok';
+}
+
+export function evaluateLlmUsageBudget(
+  summary: LlmUsageSummary,
+  limits: LlmUsageLimits = getLlmUsageLimits()
+): LlmUsageBudgetStatus {
+  const monthPrefix = (summary.today?.date || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  const loaded = ensureLoaded();
+  const monthEventsCost =
+    loaded.length > 0
+      ? loaded
+          .filter((ev) => ev.date.startsWith(monthPrefix))
+          .reduce((sum, ev) => sum + ev.costUsd, 0)
+      : summary.dailyBuckets
+          .filter((b) => b.date.startsWith(monthPrefix))
+          .reduce((sum, b) => sum + b.costUsd, 0);
+  const monthlyCostUsd = Math.round(Math.max(summary.today?.costUsd || 0, monthEventsCost) * 1_000_000) / 1_000_000;
+
+  const dailyCallsUsed = summary.today?.calls || 0;
+  const dailyTokensUsed = summary.today?.totalTokens || 0;
+  const dailyCallsPct = Math.round((dailyCallsUsed / Math.max(1, limits.dailyCallLimit)) * 100);
+  const dailyTokensPct = Math.round((dailyTokensUsed / Math.max(1, limits.dailyTokenLimit)) * 100);
+  const monthlyCostPct = Math.round((monthlyCostUsd / Math.max(0.01, limits.monthlyCostBudgetUsd)) * 100);
+
+  const dailyCallsLevel = classifyPct(dailyCallsPct, limits);
+  const dailyTokensLevel = classifyPct(dailyTokensPct, limits);
+  const monthlyCostLevel = classifyPct(monthlyCostPct, limits);
+
+  const levels = [dailyCallsLevel, dailyTokensLevel, monthlyCostLevel];
+  const overallStatus: BudgetAlertLevel = levels.includes('critical')
+    ? 'critical'
+    : levels.includes('warning')
+      ? 'warning'
+      : 'ok';
+
+  return {
+    month: monthPrefix,
+    dailyCallsUsed,
+    dailyCallsLimit: limits.dailyCallLimit,
+    dailyCallsPct,
+    dailyCallsLevel,
+    dailyTokensUsed,
+    dailyTokensLimit: limits.dailyTokenLimit,
+    dailyTokensPct,
+    dailyTokensLevel,
+    monthlyCostUsd,
+    monthlyCostBudgetUsd: limits.monthlyCostBudgetUsd,
+    monthlyCostPct,
+    monthlyCostLevel,
+    overallStatus,
+  };
+}
 
 function ensureLoaded(): LlmUsageEventRecord[] {
   if (cachedEvents !== null) return cachedEvents;
@@ -179,6 +367,7 @@ function persistEvents(events: LlmUsageEventRecord[]): void {
 export function configureLlmUsageLedgerPath(customFilePath: string): void {
   globalUsageFilePath = path.resolve(customFilePath);
   cachedEvents = null;
+  cachedLimits = null;
 }
 
 export function recordLlmUsageEvent(input: LlmUsageEventInput): LlmUsageEventRecord {

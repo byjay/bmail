@@ -421,11 +421,23 @@ test('analyzeMeetingMinutesWithAi falls back offline via buildDeterministicMeeti
   const prevKeys = {
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     GROQ_API_KEY: process.env.GROQ_API_KEY,
+    GROQ_API_KEY_1: process.env.GROQ_API_KEY_1,
+    GROQ_API_KEY_2: process.env.GROQ_API_KEY_2,
+    GROQ_API_KEY_3: process.env.GROQ_API_KEY_3,
+    GROQ_API_KEY_4: process.env.GROQ_API_KEY_4,
+    GROQ_API_KEY_5: process.env.GROQ_API_KEY_5,
+    BMAIL_GROQ_KEYS_FILE: process.env.BMAIL_GROQ_KEYS_FILE,
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
   };
   delete process.env.GEMINI_API_KEY;
   delete process.env.GROQ_API_KEY;
+  delete process.env.GROQ_API_KEY_1;
+  delete process.env.GROQ_API_KEY_2;
+  delete process.env.GROQ_API_KEY_3;
+  delete process.env.GROQ_API_KEY_4;
+  delete process.env.GROQ_API_KEY_5;
+  process.env.BMAIL_GROQ_KEYS_FILE = '__none__';
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.OPENAI_API_KEY;
 

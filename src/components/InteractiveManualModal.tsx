@@ -395,35 +395,38 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                   </div>
                 </div>
 
-                {/* Replica 2: Classic Outlook Grouped Icon Ribbon */}
-                <div className="h-10 bg-white border-b border-[#E0E0E0] px-3 flex items-center justify-between text-[11px] shrink-0">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-1 rounded bg-[#0F6CBD] text-white font-semibold text-[10px]">
+                {/* Replica 2: Classic Outlook Flat Achromatic 1px Ribbon */}
+                <div className="h-10 bg-[#FAF9F8] border-b border-[#E0E0E0] px-3 flex items-center justify-between text-[11px] shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 border border-[#0F6CBD] bg-[#0F6CBD] text-white font-semibold text-[10px]">
                       + 새 메일
                     </span>
-                    <span className="px-1.5 py-0.5 rounded hover:bg-slate-100">회신</span>
-                    <span className="px-1.5 py-0.5 rounded hover:bg-slate-100">전체 회신</span>
-                    <span className="px-1.5 py-0.5 rounded hover:bg-slate-100">전달</span>
-                    <span className="h-4 w-px bg-slate-200" />
+                    <span className="px-1.5 py-0.5 border border-transparent hover:border-[#D2D0CE] text-slate-700">회신</span>
+                    <span className="px-1.5 py-0.5 border border-transparent hover:border-[#D2D0CE] text-slate-700">전체 회신</span>
+                    <span className="px-1.5 py-0.5 border border-transparent hover:border-[#D2D0CE] text-slate-700">전달</span>
+                    <span className="h-4 w-px bg-[#D2D0CE]" />
                     <span
-                      className={`px-2 py-0.5 rounded font-semibold flex items-center gap-1 ${
+                      className={`px-2 py-0.5 border font-semibold flex items-center gap-1 ${
                         previewState === 'live-sync'
-                          ? 'bg-emerald-600 text-white animate-pulse'
-                          : 'bg-[#EBF3FC] text-[#0F6CBD]'
+                          ? 'bg-emerald-600 text-white border-emerald-700 animate-pulse'
+                          : 'bg-white text-slate-800 border-[#D2D0CE]'
                       }`}
                     >
-                      <RefreshCw className="w-3 h-3" />
-                      신규 메일 증분 동기화
+                      <RefreshCw className="w-3 h-3 text-[#0F6CBD]" />
+                      증분 동기화
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200 font-semibold">
+                    <span className="px-2 py-0.5 border border-[#D2D0CE] bg-white text-slate-800 font-semibold">
                       우측 2분할 (AI · 첨부)
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200 font-semibold">
-                      주간·월간 분석글 대시보드
+                    <span className="px-2 py-0.5 border border-[#D2D0CE] bg-white text-slate-800 font-semibold">
+                      주간·월간 대시보드
+                    </span>
+                    <span className="px-2 py-0.5 border border-[#D2D0CE] bg-white text-slate-800 font-semibold">
+                      미확인 브리핑 (14일)
                     </span>
                   </div>
                   <span className="text-[10px] text-slate-500">
-                    연결된 데이터 파일: 김봉정.pst · 백업.pst (실시간 COM 연동)
+                    김봉정.pst · 백업.pst (비블로킹 COM)
                   </span>
                 </div>
 
@@ -446,6 +449,9 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                         <span className="px-2 py-0.5 rounded bg-sky-700 text-white font-semibold">
                           고속·병렬 Groq 5-키 / 고급 Claude 5.5
                         </span>
+                        <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-bold">
+                          기준 수시 변경 (표준 프리셋)
+                        </span>
                       </div>
                     </div>
 
@@ -467,8 +473,8 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                         <div className="text-sm font-bold text-emerald-700">6,842개</div>
                       </div>
                       <div className="bg-white p-2 rounded border border-slate-200">
-                        <div className="text-[10px] text-slate-500">활성 프로젝트 · 주제</div>
-                        <div className="text-sm font-bold text-purple-700">12개 호선 · 7대 주제</div>
+                        <div className="text-[10px] text-slate-500">관리자 AI 사용량 기준 게이지</div>
+                        <div className="text-xs font-bold text-purple-700">일일 42% · SVG 기준선 정상</div>
                       </div>
                     </div>
 
@@ -486,7 +492,7 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                           </p>
                         </div>
                         <div className="text-[10px] text-slate-500 border-t pt-1">
-                          스냅샷 자동 저장됨 · Markdown / Excel CSV / HTML 즉시 출력
+                          일일 호출·토큰·월간 예산 게이지 &amp; SVG 기준선 상시 표시 · MD/CSV/HTML 즉시 출력
                         </div>
                       </div>
 
@@ -596,15 +602,15 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Col 2: Classic Today/Last Week Mail List (16%) */}
+                    {/* Col 2: Classic Flat 1px Today/Last Week Mail List (16%, no avatars) */}
                     <div className="w-[16%] bg-white border-r border-[#E0E0E0] flex flex-col text-[10px] shrink-0">
-                      <div className="px-2 py-1 bg-slate-50 border-b font-bold text-slate-700 flex justify-between">
+                      <div className="px-2 py-1 bg-[#FAF9F8] border-b border-[#E0E0E0] font-bold text-slate-700 flex justify-between">
                         <span>모든 항목 · 읽지 않음</span>
                         <span>날짜 ↓</span>
                       </div>
-                      <div className="p-1.5 space-y-1 overflow-hidden">
-                        <div className="text-[9px] font-bold text-slate-500">⌄ 오늘</div>
-                        <div className="p-1.5 rounded bg-[#EBF3FC] border-l-[3px] border-[#0F6CBD]">
+                      <div className="divide-y divide-[#EDEBE9] overflow-hidden">
+                        <div className="px-2 py-1 bg-[#FAF9F8] text-[9px] font-bold text-slate-500">⌄ 오늘</div>
+                        <div className="px-2 py-1.5 bg-[#EBF3FC] border-l-[3px] border-[#0F6CBD]">
                           <div className="flex justify-between font-bold">
                             <span>박봉근</span>
                             <span className="text-[#0F6CBD]">오전 11:26</span>
@@ -615,7 +621,7 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                           <div className="text-slate-600 truncate">내일(11/24)까지 회신 부탁...</div>
                         </div>
 
-                        <div className="p-1.5 rounded hover:bg-slate-50 border-l-[3px] border-[#0F6CBD]">
+                        <div className="px-2 py-1.5 hover:bg-slate-50 border-l-[3px] border-[#0F6CBD]">
                           <div className="flex justify-between font-bold">
                             <span>MNC최길용</span>
                             <span>14:28</span>
@@ -625,8 +631,8 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                           </div>
                         </div>
 
-                        <div className="text-[9px] font-bold text-slate-500 pt-1">⌄ 지난 주</div>
-                        <div className="p-1.5 rounded hover:bg-slate-50">
+                        <div className="px-2 py-1 bg-[#FAF9F8] text-[9px] font-bold text-slate-500">⌄ 지난 주</div>
+                        <div className="px-2 py-1.5 hover:bg-slate-50">
                           <div className="flex justify-between">
                             <span className="font-semibold">김정인</span>
                             <span>11-20 (금)</span>
@@ -636,11 +642,16 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Col 3: Reading Pane with Rich HTML + Inline cid: 3D Image (33%) */}
+                    {/* Col 3: Reading Pane with Rich HTML + AI 요약 보기 Toggle (33%) */}
                     <div className="w-[33%] bg-white border-r border-[#E0E0E0] p-3 flex flex-col justify-between text-[10px] overflow-hidden">
                       <div className="space-y-2">
-                        <div className="text-xs font-bold text-slate-900">
-                          RE: [RE]H042 Exmar Project_생산설계 관련 자료 제공의 건_261102
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="text-xs font-bold text-slate-900">
+                            RE: [RE]H042 Exmar Project_생산설계 관련 자료 제공의 건_261102
+                          </div>
+                          <span className="px-1.5 py-0.5 border border-[#D2D0CE] bg-[#FAF9F8] text-slate-700 font-semibold text-[9px] whitespace-nowrap shrink-0">
+                            AI 요약 보기
+                          </span>
                         </div>
                         <div className="flex items-center justify-between text-slate-600 border-b pb-1.5">
                           <span>김정인 &lt;jikim@seastargo.com&gt; → 석주선 대표님, 김봉정 부장</span>
@@ -693,10 +704,10 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                       <div className="space-y-2">
                         <div className="flex items-center justify-between border-b pb-1">
                           <span className="font-bold text-purple-700 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" /> AI 분석 · 답안
+                            <Sparkles className="w-3 h-3" /> AI 분석 · 0ms
                           </span>
-                          <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 text-[9px] font-bold">
-                            Sonnet 5.5
+                          <span className="px-1.5 py-0.5 bg-slate-100 border border-[#D2D0CE] text-slate-700 text-[9px] font-bold">
+                            자동 / 수동
                           </span>
                         </div>
                         <div className="grid grid-cols-5 gap-0.5 bg-slate-200 p-0.5 rounded text-[9px] font-semibold text-center">
@@ -798,16 +809,16 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                         )}
                       </div>
 
-                      {/* Bottom-Right Pinned Compact Mini Translation Window Replica */}
+                      {/* Bottom-Right Pinned 14-Day Unread Briefing Pill & Mini Assist Replica */}
                       <div className="p-1.5 rounded-lg bg-[#0F6CBD] text-white shadow-md border border-white/20">
                         <div className="flex items-center justify-between text-[9px] font-bold">
-                          <span>번역·요약 미니창 (우측 하단 고정)</span>
-                          <span>무오류 200 OK</span>
+                          <span>최근 14일 미확인 브리핑 · 미니창</span>
+                          <span>14일 기준</span>
                         </div>
                         <div className="text-[8px] text-sky-100 truncate">
                           {previewState === 'sgw-login-chat'
-                            ? 'SGW 공식 로그인 창(https://sgw.seastar.work) 완전 연동됨'
-                            : '좌측 트리를 가리지 않는 330px 우측 하단 컴팩트 모드'}
+                            ? '최근 14일 미확인 사이드 팝업 + SGW 로그인 창 연동됨'
+                            : '4년 전 등 장기 과거 제외 · 우측 하단 플로팅 알약/팝업'}
                         </div>
                       </div>
                     </div>

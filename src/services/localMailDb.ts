@@ -252,6 +252,8 @@ export class LocalMailDb {
       CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder);
       CREATE INDEX IF NOT EXISTS idx_emails_folder_name ON emails(folder_name);
       CREATE INDEX IF NOT EXISTS idx_emails_store_name ON emails(store_name);
+      CREATE INDEX IF NOT EXISTS idx_emails_active_ts ON emails(is_deleted, timestamp DESC);
+      CREATE INDEX IF NOT EXISTS idx_emails_unread_inbox ON emails(is_deleted, folder, is_read, timestamp DESC);
 
       CREATE VIRTUAL TABLE IF NOT EXISTS emails_fts USING fts5(
         id UNINDEXED,
@@ -543,10 +545,23 @@ export class LocalMailDb {
   }
 
   /** Pure read-only lookup of unread inbox messages without mutating `is_read`. */
-  public queryUnreadInboxEmails(limit = 300): MailItem[] {
+  public queryUnreadInboxEmails(limit = 300, maxAgeDays = 14): MailItem[] {
     const db = this.ensureOpen();
     if (!db) return [];
     const safeLimit = Math.max(1, Math.min(1000, Number(limit) || 300));
+    const safeDays = Number.isFinite(Number(maxAgeDays)) ? Number(maxAgeDays) : 14;
+    if (safeDays > 0) {
+      const cutoffIso = new Date(Date.now() - safeDays * 86_400_000).toISOString();
+      const rows = db
+        .prepare(
+          `SELECT e.* FROM emails e
+           WHERE e.is_deleted = 0 AND e.folder = 'inbox' AND e.is_read = 0 AND e.timestamp >= ?
+           ORDER BY e.timestamp DESC
+           LIMIT ?`
+        )
+        .all(cutoffIso, safeLimit);
+      return rows.map(rowToMailItem);
+    }
     const rows = db
       .prepare(
         `SELECT e.* FROM emails e

@@ -5,10 +5,14 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   configureLlmUsageLedgerPath,
+  DEFAULT_LLM_USAGE_LIMITS,
   estimateModelCostUsd,
+  evaluateLlmUsageBudget,
+  getLlmUsageLimits,
   getLlmUsageSummary,
   recordLlmUsageEvent,
   resetLlmUsageLedger,
+  saveLlmUsageLimits,
 } from './llmUsageTracker';
 
 test('llmUsageTracker records exact and estimated token usage, aggregates by model/provider, and persists to disk', () => {
@@ -88,4 +92,62 @@ test('estimateModelCostUsd prices Haiku < Sonnet < Opus accurately and returns $
   assert.ok(sonnetCost > haikuCost);
   assert.ok(opusCost > sonnetCost);
   assert.equal(groqCost, 0);
+});
+
+test('saveLlmUsageLimits clamps thresholds, persists to disk, and evaluateLlmUsageBudget reports ok/warning/critical', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmail-llm-limits-'));
+  const ledgerFile = path.join(tmpDir, 'llm-usage-ledger.json');
+  configureLlmUsageLedgerPath(ledgerFile);
+  resetLlmUsageLedger();
+
+  try {
+    const initial = getLlmUsageLimits();
+    assert.equal(initial.dailyCallLimit, DEFAULT_LLM_USAGE_LIMITS.dailyCallLimit);
+
+    const updated = saveLlmUsageLimits({
+      dailyCallLimit: 10,
+      dailyTokenLimit: 1000,
+      monthlyCostBudgetUsd: 1.0,
+      warningThresholdPct: 70,
+      criticalThresholdPct: 90,
+      groqParallelMax: 9, // clamped to 5
+      claudeAdvancedMode: 'claude-only',
+    });
+    assert.equal(updated.groqParallelMax, 5);
+    assert.equal(updated.claudeAdvancedMode, 'claude-only');
+
+    // Reload from disk in fresh cache
+    configureLlmUsageLedgerPath(ledgerFile);
+    assert.equal(getLlmUsageLimits().dailyCallLimit, 10);
+
+    // Trigger 7 calls -> 70% warning
+    for (let i = 0; i < 7; i += 1) {
+      recordLlmUsageEvent({
+        provider: 'groq',
+        modelId: 'openai/gpt-oss-120b',
+        inputTokens: 40,
+        outputTokens: 20,
+      });
+    }
+    const warnStatus = evaluateLlmUsageBudget(getLlmUsageSummary(5), getLlmUsageLimits());
+    assert.equal(warnStatus.dailyCallsPct, 70);
+    assert.equal(warnStatus.dailyCallsLevel, 'warning');
+    assert.equal(warnStatus.overallStatus, 'warning');
+
+    // Push past 90% -> critical
+    for (let i = 0; i < 3; i += 1) {
+      recordLlmUsageEvent({
+        provider: 'groq',
+        modelId: 'openai/gpt-oss-120b',
+        inputTokens: 40,
+        outputTokens: 20,
+      });
+    }
+    const critStatus = evaluateLlmUsageBudget(getLlmUsageSummary(5), getLlmUsageLimits());
+    assert.equal(critStatus.dailyCallsPct, 100);
+    assert.equal(critStatus.dailyCallsLevel, 'critical');
+    assert.equal(critStatus.overallStatus, 'critical');
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
 });

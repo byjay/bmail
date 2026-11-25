@@ -175,6 +175,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
   const [customReplyDirective, setCustomReplyDirective] = useState('');
   const [targetLang, setTargetLang] = useState<'ko' | 'en' | 'ja' | 'zh'>('ko');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [autoAiOnSelect, setAutoAiOnSelect] = useState(false);
 
   // Per-mail persistent Chat & Action states
   const [chatMap, setChatMap] = useState<Record<string, Array<{ role: 'user' | 'assistant'; content: string }>>>(() => {
@@ -294,15 +295,21 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
   useEffect(() => {
     if (!email) {
       setPayload(null);
+      setLoading(false);
       return;
     }
     const cacheKey = `${email.id}:${targetLang}`;
     const cached = readDockCache(cacheKey);
     if (cached) {
       setPayload(cached);
+      setLoading(false);
       return;
     }
     setPayload(buildClientFallbackPayload(email, undefined, targetLang));
+    setLoading(false);
+    if (!autoAiOnSelect) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       void runAssistant(email, 'analyze', { lang: targetLang });
     }, 350);
@@ -312,7 +319,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
         abortControllerRef.current.abort();
       }
     };
-  }, [email?.id, targetLang]);
+  }, [email?.id, targetLang, autoAiOnSelect]);
 
   const currentAction: MailActionRecord = useMemo(() => {
     if (!email) {
@@ -411,6 +418,19 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            aria-pressed={autoAiOnSelect}
+            onClick={() => setAutoAiOnSelect((prev) => !prev)}
+            title="메일 클릭 시 정밀 AI 분석 자동 호출 (기본 수동: 0ms 즉시 요약)"
+            className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold transition-colors ${
+              autoAiOnSelect
+                ? 'bg-[#EBF3FC] border-[#B4D6FA] text-[#0F6CBD]'
+                : 'bg-white border-[#E1DFDD] text-[#616161] hover:bg-[#F3F2F1]'
+            }`}
+          >
+            {autoAiOnSelect ? '자동' : '수동'}
+          </button>
           <button
             type="button"
             disabled={loading}

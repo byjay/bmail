@@ -1,11 +1,23 @@
-# HANDOFF.md — Bmail v1.2.7 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
+# HANDOFF.md — Bmail v1.2.9 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
 
-> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.7`)
+> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.9`)
 > **보안 정책**: 프로덕션 사용자 UI에서 `[HANDOFF]` 및 `[전체 코드 다운로드]` 버튼은 제거되었으며, `/api/export/handoff` 엔드포인트 삭제(HTTP `404`), `/api/export/source-archive*`는 `BMAIL_DEV_EXPORT === 'true'` 개발 환경 전용으로 격리되었습니다(기본 HTTP `404`).
 
 ---
 
-## 0. 2026-11-25 v1.2.7 Classic Outlook 작성·발송 100% 패리티 · API 호출량 그래프 · Claude 고급 분리 · Groq 5-키 병렬 & 1줄 터미널 등록 실측 현황
+## 0. 2026-11-25 v1.2.9 오리지널 클래식 Outlook 평면 UI · 최근 14일 브리핑 우측하단 팝업 · 속도 고속화 · 관리자 사용량 기준(v1.2.8 포함) 실측 현황
+
+| 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
+|---|---|---|
+| **오리지널 클래식 Outlook 평면 1px UI 정돈** | ✅ 실측 완료 | `OutlookWorkbench.tsx` (리본 무채색 정돈 + 세로 1px `#E1DFDD` 구분선 기반 평면 3-Pane 적용 · `rounded-lg`/`gap-2` 박스 제거 · 상단 5단 인라인 브리핑 배너 제거 · 본문 위 인라인 AI 요약 기본 숨김 및 헤더 `[AI 요약 보기]` 토글), `OutlookStoreFolderTree.tsx` (하위 폴더 반복 아이콘 생략 + 폴더 12개 초과 시 컴팩트 검색창), `outlookWorkspaceModel.ts` (신규 프로필 `showSenderAvatars` 기본값 `false`; 기존 캐시 프로필 `user_state`는 기존 설정 `true` 유지 실측) |
+| **최근 14일 미확인 브리핑 cutoff & 우측 하단 플로팅 팝업** | ✅ 실측 완료 | `localMailDb.ts` (`queryUnreadInboxEmails` 최근 `14`일 SQL timestamp 컷오프), `unreadBriefingEngine.ts` (`DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS = 14`, `excludedOldUnreadCount`), `UnreadBriefingBanner.tsx` (기본 닫힘 `false`, 우측 하단 `fixed bottom-14 right-3 z-40` 알약 + 사이드/하단 팝업 드로어, `[닫기]` 및 `Escape`), `OutlookWorkbench.tsx` (리본 `[미확인 브리핑]` 토글). 실서버 `/api/local/unread-briefing` **`9ms` HTTP `200`** (`maxAgeDays: 14`, `totalUnread: 4`, `urgentReplyCount: 0`, `2023`/`SCA 35K FD` 과거 메일 `0`건), E2E 열기/닫기 및 비중첩 확인 |
+| **속도 고속화 (SQLite 복합 인덱스 · 비블로킹 탐색 · AI 도크 0ms)** | ✅ 실측 완료 | `localMailDb.ts` (`idx_emails_active_ts`, `idx_emails_unread_inbox` 복합 인덱스), `server.ts` (`/api/local/bootstrap` 내 `discoverAndApplyAllOutlookSettings` `setTimeout(..., 1500)` 백그라운드 비블로킹화), `MailAiDockPanel.tsx` (`autoAiOnSelect` 기본 `false` + `[수동/자동]` 토글로 메일 클릭 시 HTTP 자동 호출 없이 `0ms` 즉시 요약). 설치본 실서버(`3000`, `24,671`건 DB) `/api/local/bootstrap?limit=100` **`70ms`** (`HTTP 200`) 실측 |
+| **v1.2.8 포함: 관리자 LLM 사용량 상시 기준 게이지·비교표·수시 변경** | ✅ 실측 완료 | `llmUsageTracker.ts` (`LlmUsageLimits`, `llm-usage-limits.json`, `evaluateLlmUsageBudget`), `groqKeyRotator.ts` (`groqParallelMax` 동적 반영 · `claudeAdvancedMode` · `BMAIL_GROQ_KEYS_FILE` 테스트 격리), `server.ts` (`GET /api/admin/llm-usage`, `PUT /api/admin/llm-usage/limits`), `AdminLlmUsageCompactCard.tsx` (3종 게이지 + 비교표 + SVG 일일 기준선 + `[기준 수시 변경]`/`[저장]`). E2E에서 `Groq 키 슬롯: 5/5 활성 (최대 5병렬)`, 일일 상한 `300 → 500` 저장(`500회/일`·`일일 기준 500회` SVG 기준선)·`300` 원복 실측 (`EGO_EXIT=0`) |
+| **매뉴얼 Flash 동기화 · 검증 · 배포 (`1.2.9`)** | ✅ 실측 완료 | `AGENTS.md` 4항 준수 `Model: "flash"` 서브에이전트가 `manualCatalog.ts` (`1.2.9`, 30개 아이콘, 10개 모션 씬) & `InteractiveManualModal.tsx` 동기화 (`manualCatalog.test.ts` 1/1 PASS). `npm run lint` (`0`), `node --check` (`0`), Node `v24.20.0` 전체 35개 파일 **`148/148 PASS`** (`0` fail, `0` skipped). `release-exe/Bmail-Outlook-AI-Setup-1.2.9.exe` (`121,455,272` B, `sha256: 8192cf37961b3f624ed7e37affaf5fc609006e875cb0de1a8466a4587b563427`), R2 `latest.json`, Worker Version `e4112bd9-d612-4fb9-a390-752a48ec42a0`, 무음 업그레이드 `NSIS_EXIT_CODE=0` (`installed 1.2.9`) |
+
+---
+
+## 0-0. 2026-11-25 v1.2.7 Classic Outlook 작성·발송 100% 패리티 · API 호출량 그래프 · Claude 고급 분리 · Groq 5-키 병렬 & 1줄 터미널 등록 실측 현황
 
 | 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
 |---|---|---|

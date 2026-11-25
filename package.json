@@ -1,7 +1,7 @@
 {
   "name": "bmail-outlook-ai",
   "private": true,
-  "version": "1.2.7",
+  "version": "1.2.9",
   "description": "Bmail — Outlook AI 워크스페이스 (로컬 PST/POP3/SMTP 완전 대체 + Cloudflare Workers 게이트웨이)",
   "author": "Seastar Work",
   "main": "desktop/main.cjs",

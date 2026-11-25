@@ -42,8 +42,13 @@ export interface UnreadProjectGroup {
   items: UnreadBriefingItem[];
 }
 
+export const DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS = 14;
+export const DEFAULT_URGENT_REPLY_MAX_AGE_DAYS = 14;
+
 export interface UnreadPriorityBriefing {
   generatedAt: string;
+  maxAgeDays: number;
+  excludedOldUnreadCount: number;
   totalUnread: number;
   urgentReplyCount: number;
   importantCount: number;
@@ -67,21 +72,49 @@ function tierRank(tier: UnreadUrgencyTier): number {
 }
 
 /**
- * Pure read-only triage of ALL unread inbox emails:
+ * Pure read-only triage of RECENT unread inbox emails (default within 14 days so archived old mails
+ * from previous months/years are never mistakenly surfaced as urgent/important):
  * - Never mutates `isRead` or marks items as read
- * - Identifies mandatory urgent-reply items
+ * - Identifies mandatory urgent-reply items (strictly recent)
  * - Groups and sorts by Project and Importance/Urgency
  */
 export function buildUnreadPriorityBriefing(
   emails: MailItem[],
   projects: ProjectDefinition[] = [],
-  overrides: ProjectMailOverrides = EMPTY_PROJECT_MAIL_OVERRIDES
+  overrides: ProjectMailOverrides = EMPTY_PROJECT_MAIL_OVERRIDES,
+  options?: { maxAgeDays?: number; nowMs?: number }
 ): UnreadPriorityBriefing {
-  const unreadInbox = emails.filter((m) => m && m.folder === 'inbox' && !m.isRead);
+  const maxAgeDays =
+    typeof options?.maxAgeDays === 'number' && Number.isFinite(options.maxAgeDays)
+      ? Math.max(0, options.maxAgeDays)
+      : DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS;
+  const nowMs =
+    typeof options?.nowMs === 'number' && Number.isFinite(options.nowMs)
+      ? options.nowMs
+      : Date.now();
+  const maxAgeMs = maxAgeDays * 86_400_000;
+  const urgentCutoffMs = DEFAULT_URGENT_REPLY_MAX_AGE_DAYS * 86_400_000;
+
+  let excludedOldUnreadCount = 0;
+  const unreadInbox = emails.filter((m) => {
+    if (!m || m.folder !== 'inbox' || m.isRead) return false;
+    if (maxAgeDays <= 0) return true;
+    const rawTs = String(m.timestamp || m.date || '').trim();
+    const parsedMs = rawTs ? Date.parse(rawTs) : Number.NaN;
+    if (!Number.isFinite(parsedMs) || nowMs - parsedMs > maxAgeMs) {
+      excludedOldUnreadCount += 1;
+      return false;
+    }
+    return true;
+  });
+
   const projectMap = new Map(projects.map((p) => [p.code, p]));
   const items: UnreadBriefingItem[] = [];
 
   for (const mail of unreadInbox) {
+    const rawTs = String(mail.timestamp || mail.date || '').trim();
+    const parsedMs = rawTs ? Date.parse(rawTs) : Number.NaN;
+    const isWithinUrgentWindow = Number.isFinite(parsedMs) && nowMs - parsedMs <= urgentCutoffMs;
     const subject = String(mail.subject || '(제목 없음)').trim();
     const cleanedBody = cleanEmailBody(String(mail.body || mail.snippet || ''), 700)
       .replace(/\s+/g, ' ')
@@ -107,6 +140,9 @@ export function buildUnreadPriorityBriefing(
       projects,
     });
 
+    const projectCode =
+      assessmentCodeFallback(mail, projects, overrides, routing.projectCode, drawings.length);
+    void projectCode;
     const assessment = classifyMailPriority(mail, {
       projects,
       projectMailOverrides: overrides,
@@ -114,21 +150,22 @@ export function buildUnreadPriorityBriefing(
       drawingRefCount: drawings.length,
     });
 
-    const projectCode =
+    const resolvedProjectCode =
       assessment.matchedProjectCode ||
       (routing.projectCode !== 'UNASSIGNED' ? routing.projectCode : 'GENERAL');
-    const matchedProj = projectMap.get(projectCode);
+    const matchedProj = projectMap.get(resolvedProjectCode);
     const projectName =
       matchedProj?.name ||
-      (projectCode === 'GENERAL'
+      (resolvedProjectCode === 'GENERAL'
         ? '일반 · 기타 업무'
-        : routing.projectCode === projectCode
+        : routing.projectCode === resolvedProjectCode
           ? routing.projectName
-          : projectCode);
+          : resolvedProjectCode);
 
     const needsReply = REPLY_ACTION_RE.test(combined);
     const isUrgentReply =
-      assessment.level === 'urgent' || (assessment.score >= 52 && needsReply);
+      isWithinUrgentWindow &&
+      (assessment.level === 'urgent' || (assessment.score >= 52 && needsReply));
     const isImportant = !isUrgentReply && (assessment.level === 'important' || needsReply || mail.isFlagged);
 
     const urgencyTier: UnreadUrgencyTier = isUrgentReply
@@ -166,7 +203,7 @@ export function buildUnreadPriorityBriefing(
       date: mail.date,
       timeLabel: mail.timeLabel,
       timestamp: mail.timestamp,
-      projectCode,
+      projectCode: resolvedProjectCode,
       projectName,
       urgencyTier,
       urgencyLabel,
@@ -224,11 +261,13 @@ export function buildUnreadPriorityBriefing(
 
   const briefingSummary =
     items.length === 0
-      ? '확인하지 않은 수신 메일이 없습니다.'
-      : `미확인(안 읽음 유지) ${items.length}건 중 반드시 긴급회신 ${urgentReplyAlerts.length}건 · 중요 ${importantCount}건 · ${projectGroups.length}개 프로젝트로 자동 정리되었습니다.`;
+      ? `최근 ${maxAgeDays}일 내 확인하지 않은 수신 메일이 없습니다.`
+      : `최근 ${maxAgeDays}일 미확인(안 읽음 유지) ${items.length}건 중 반드시 긴급회신 ${urgentReplyAlerts.length}건 · 중요 ${importantCount}건 · ${projectGroups.length}개 프로젝트로 정리되었습니다.`;
 
   return {
     generatedAt: new Date().toISOString(),
+    maxAgeDays,
+    excludedOldUnreadCount,
     totalUnread: items.length,
     urgentReplyCount: urgentReplyAlerts.length,
     importantCount,
@@ -238,4 +277,14 @@ export function buildUnreadPriorityBriefing(
     urgentReplyAlerts,
     projectGroups,
   };
+}
+
+function assessmentCodeFallback(
+  _mail: MailItem,
+  _projects: ProjectDefinition[],
+  _overrides: ProjectMailOverrides,
+  _ruleCode: string,
+  _drawingsLen: number
+): string {
+  return '';
 }

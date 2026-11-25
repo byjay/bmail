@@ -76,8 +76,11 @@ import {
 } from './src/services/groqKeyRotator';
 import {
   configureLlmUsageLedgerPath,
+  evaluateLlmUsageBudget,
+  getLlmUsageLimits,
   getLlmUsageSummary,
   resetLlmUsageLedger,
+  saveLlmUsageLimits,
 } from './src/services/llmUsageTracker';
 import { LocalBackupScheduler } from './src/services/localBackupScheduler';
 import {
@@ -2221,40 +2224,66 @@ Write-Output 'COM_OK'
     res.json(emvVault.getResolutionPreview(body.employeeId));
   });
 
-  // --- Compact Admin LLM Usage Telemetry Routes (Zero Secret Exposure) ---
+  // --- Compact Admin LLM Usage Telemetry & Editable Limits Routes (Zero Secret Exposure) ---
   app.get('/api/admin/llm-usage', (req, res) => {
     const rawLimit = Number(req.query.limit);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(50, rawLimit) : 12;
     const summary = getLlmUsageSummary(limit);
+    const limits = getLlmUsageLimits();
+    const budgetStatus = evaluateLlmUsageBudget(summary, limits);
     const groqStatus = getGroqKeyPoolStatus();
     const claudeConfigured = Boolean((process.env.ANTHROPIC_API_KEY || '').trim());
     const geminiConfigured = Boolean((process.env.GEMINI_API_KEY || '').trim());
+    const effectiveParallel =
+      groqStatus.configuredCount > 0 ? Math.min(groqStatus.configuredCount, limits.groqParallelMax) : 1;
     res.json({
       ...summary,
+      limits,
+      budgetStatus,
       routingPolicy: {
         groqSlotsConfigured: groqStatus.configuredCount,
         groqSlotsHealthy: groqStatus.healthyCount,
-        groqParallelMax: Math.max(1, groqStatus.configuredCount),
+        groqParallelMax: effectiveParallel,
         claudeConfigured,
         geminiConfigured,
         defaultFastProvider:
           groqStatus.configuredCount > 0
-            ? `Groq ${groqStatus.configuredCount}-키 병렬 (openai/gpt-oss-120b)`
+            ? `Groq ${groqStatus.configuredCount}-키 / 최대 ${effectiveParallel}병렬 (openai/gpt-oss-120b)`
             : claudeConfigured
               ? 'Claude Haiku 5.5 (Groq 미설정 폴백)'
               : '로컬 결정론적 엔진',
-        advancedAnalysisProvider: claudeConfigured
-          ? 'Claude 5.5 (Sonnet/Opus 자동 티어)'
-          : groqStatus.configuredCount > 0
-            ? 'Groq 5-키 폴백 (Claude 키 미설정)'
-            : '로컬 결정론적 엔진',
+        advancedAnalysisProvider:
+          limits.claudeAdvancedMode === 'groq-only' && groqStatus.configuredCount > 0
+            ? 'Groq 전용 강제 모드 (초대형 프롬프트 제외)'
+            : claudeConfigured
+              ? limits.claudeAdvancedMode === 'claude-only'
+                ? 'Claude 5.5 전용 강제 모드'
+                : 'Claude 5.5 (Sonnet/Opus 자동 티어)'
+              : groqStatus.configuredCount > 0
+                ? 'Groq 5-키 폴백 (Claude 키 미설정)'
+                : '로컬 결정론적 엔진',
       },
     });
   });
 
+  app.put('/api/admin/llm-usage/limits', (req, res) => {
+    try {
+      const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+      const limits = saveLlmUsageLimits(body);
+      const summary = getLlmUsageSummary(12);
+      const budgetStatus = evaluateLlmUsageBudget(summary, limits);
+      res.json({ ok: true, limits, budgetStatus });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '사용량 기준 저장 실패';
+      res.status(400).json({ error: msg });
+    }
+  });
+
   app.post('/api/admin/llm-usage/reset', (_req, res) => {
     resetLlmUsageLedger();
-    res.json({ ok: true, summary: getLlmUsageSummary(12) });
+    const summary = getLlmUsageSummary(12);
+    const limits = getLlmUsageLimits();
+    res.json({ ok: true, summary, limits, budgetStatus: evaluateLlmUsageBudget(summary, limits) });
   });
 
   // --- Offline Local SQLite Daily Compressed Backup Snapshot Routes ---
@@ -2281,7 +2310,7 @@ Write-Output 'COM_OK'
   app.get('/api/local/bootstrap', (req, res) => {
     const rawLimit = Number(req.query.limit);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(1000, rawLimit) : 300;
-    let payload = localDb.getBootstrapPayload(limit);
+    const payload = localDb.getBootstrapPayload(limit);
     if (
       payload.available &&
       process.platform === 'win32' &&
@@ -2289,12 +2318,13 @@ Write-Output 'COM_OK'
       !payload.signatures.some((s) => s.htmlContent && s.htmlContent.includes('data:image/'))
     ) {
       didAutoDiscoverBootstrapSettings = true;
-      try {
-        discoverAndApplyAllOutlookSettings(localDb);
-        payload = localDb.getBootstrapPayload(limit);
-      } catch {
-        // Keep bootstrap resilient if Registry/Signatures unavailable
-      }
+      setTimeout(() => {
+        try {
+          discoverAndApplyAllOutlookSettings(localDb);
+        } catch {
+          // Keep bootstrap background discovery resilient
+        }
+      }, 1500);
     } else {
       didAutoDiscoverBootstrapSettings = true;
     }
@@ -2924,12 +2954,14 @@ Write-Output 'COM_OK'
     try {
       const rawLimit = Number(req.query.limit || 250);
       const limit = Number.isFinite(rawLimit) ? Math.max(20, Math.min(500, rawLimit)) : 250;
-      const unread = localDb.queryUnreadInboxEmails(limit);
+      const rawDays = Number(req.query.days ?? 14);
+      const maxAgeDays = Number.isFinite(rawDays) ? Math.max(1, Math.min(90, rawDays)) : 14;
+      const unread = localDb.queryUnreadInboxEmails(limit, maxAgeDays);
       const projects = localDb.getState<ProjectDefinition[]>('projects') || [];
       const overrides =
         localDb.getState<ProjectMailOverrides>('projectMailOverrides') ||
         EMPTY_PROJECT_MAIL_OVERRIDES;
-      res.json(buildUnreadPriorityBriefing(unread, projects, overrides));
+      res.json(buildUnreadPriorityBriefing(unread, projects, overrides, { maxAgeDays }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : '미열람 메일 브리핑 생성 실패';
       res.status(500).json({ error: msg });

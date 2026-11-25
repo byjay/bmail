@@ -178,7 +178,7 @@ export const DEFAULT_OUTLOOK_PREFERENCES: OutlookPreferences = {
     wideReadingPane: true,
     readingFontSize: 'md',
     previewLines: 1,
-    showSenderAvatars: true,
+    showSenderAvatars: false,
     conversationView: false,
     newestOnTop: true,
     defaultReplyAction: 'reply',

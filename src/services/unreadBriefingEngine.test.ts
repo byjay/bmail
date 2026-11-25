@@ -57,6 +57,15 @@ test('buildUnreadPriorityBriefing analyzes unread mails read-only, prioritizes u
       isRead: true,
     }),
     makeMail({
+      id: 'old-4yr-ignore',
+      subject: '[긴급] 상상인 선박기계 - SCA 35K FD - 생산 설계 도면 출도 회신 요망',
+      body: '2023-03-09 대용량 첨부파일 긴급 회신 요망',
+      date: '2023-03-09',
+      timestamp: '2023-03-09T09:00:00.000Z',
+      importance: 'high',
+      isRead: false,
+    }),
+    makeMail({
       id: 'normal-gen',
       subject: '사내 공지: 11월 식단표',
       body: '이번 달 식단 안내드립니다.',
@@ -77,7 +86,10 @@ test('buildUnreadPriorityBriefing analyzes unread mails read-only, prioritizes u
     }),
   ];
 
-  const briefing = buildUnreadPriorityBriefing(mails, SAMPLE_PROJECTS);
+  const briefing = buildUnreadPriorityBriefing(mails, SAMPLE_PROJECTS, undefined, {
+    maxAgeDays: 14,
+    nowMs: Date.parse('2026-11-25T15:00:00.000Z'),
+  });
 
   // Never marks unread emails as read
   for (const orig of mails) {
@@ -86,6 +98,7 @@ test('buildUnreadPriorityBriefing analyzes unread mails read-only, prioritizes u
     }
   }
 
+  assert.equal(briefing.excludedOldUnreadCount, 1);
   assert.equal(briefing.totalUnread, 3);
   assert.equal(briefing.urgentReplyCount, 1);
   assert.equal(briefing.urgentReplyAlerts[0].emailId, 'urgent-ky');

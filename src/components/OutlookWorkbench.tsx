@@ -439,7 +439,7 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
       return next;
     });
   };
-  const [showUnreadBriefing, setShowUnreadBriefing] = useState(true);
+  const [showUnreadBriefing, setShowUnreadBriefing] = useState(false);
   const [briefingFetchedEmail, setBriefingFetchedEmail] = useState<MailItem | null>(null);
   const [showAttachSplitDock, setShowAttachSplitDock] = useState(false);
   const [selectedPreviewAttachmentIdx, setSelectedPreviewAttachmentIdx] = useState<number | null>(null);
@@ -1825,10 +1825,10 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
               <button
                 type="button"
                 onClick={onOpenPop3Modal}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-[5px] whitespace-nowrap ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-[4px] border transition-colors whitespace-nowrap ${
                   pop3ConnectedEmail
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'text-[#242424] hover:bg-[#F5F5F5]'
+                    ? 'bg-[#EDEBE9] text-[#242424] border-[#D1D1D1]'
+                    : 'bg-white border-transparent text-[#242424] hover:bg-[#F3F2F1]'
                 }`}
               >
                 <Plug className={`w-3.5 h-3.5 ${pop3ConnectedEmail ? 'text-emerald-600' : 'text-[#0F6CBD]'}`} />
@@ -1836,18 +1836,18 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
               </button>
             )}
 
-            <div className="h-5 w-px bg-[#E0E0E0] mx-1.5" aria-hidden="true" />
+            <div className="h-5 w-px bg-[#E1DFDD] mx-1.5" aria-hidden="true" />
 
-            {/* Authentic Outlook Ribbon Add-in, 2-Split Docks, Live Sync & Manual Controls */}
+            {/* Classic Monochrome Ribbon Add-in, Split Docks, Live Sync & Briefing Toggle */}
             {onDiscoverOutlookSettings && (
               <button
                 type="button"
                 disabled={isDiscoveringOutlookSettings}
                 onClick={() => void onDiscoverOutlookSettings()}
                 title="현재 PC Outlook의 서명(명함)·계정·즐겨찾기·읽기창·근무시간 등 모든 설정을 탐색해 즉시 반영합니다"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-semibold transition-colors whitespace-nowrap disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] bg-white hover:bg-[#F3F2F1] border border-transparent text-[#242424] text-xs font-medium transition-colors whitespace-nowrap disabled:opacity-60"
               >
-                <Sliders className={`w-3.5 h-3.5 ${isDiscoveringOutlookSettings ? 'animate-spin' : ''}`} />
+                <Sliders className={`w-3.5 h-3.5 text-[#424242] ${isDiscoveringOutlookSettings ? 'animate-spin' : ''}`} />
                 <span>{isDiscoveringOutlookSettings ? '설정 탐색 중...' : '아웃룩 설정 탐색·적용'}</span>
               </button>
             )}
@@ -1858,9 +1858,9 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
                 disabled={isSyncingLiveOutlook}
                 onClick={onSyncLiveOutlook}
                 title="1회 불러온 데이터를 영구 저장하고 변경된 PST 및 실행 중인 Outlook(COM) 신규 메일만 초고속 증분 동기화합니다"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] bg-[#EBF3FC] hover:bg-[#CFE4FA] text-[#0F6CBD] text-xs font-semibold transition-colors whitespace-nowrap disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] bg-white hover:bg-[#F3F2F1] border border-transparent text-[#242424] text-xs font-medium transition-colors whitespace-nowrap disabled:opacity-60"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingLiveOutlook ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-3.5 h-3.5 text-[#0F6CBD] ${isSyncingLiveOutlook ? 'animate-spin' : ''}`} />
                 <span>{isSyncingLiveOutlook ? '증분 동기화 중...' : '신규 메일 증분 동기화'}</span>
               </button>
             )}
@@ -1869,27 +1869,49 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
               type="button"
               aria-pressed={showAiSplitDock}
               onClick={() => togglePinAiSplitDock()}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] border text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] border text-xs font-medium transition-colors whitespace-nowrap ${
                 showAiSplitDock
-                  ? 'bg-[#EBF3FC] border-[#B4D6FA] text-[#0F6CBD]'
-                  : 'bg-white border-transparent text-[#242424] hover:bg-[#F5F5F5]'
+                  ? 'bg-[#EDEBE9] border-[#D1D1D1] text-[#0F6CBD] font-semibold'
+                  : 'bg-white border-transparent text-[#242424] hover:bg-[#F3F2F1]'
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-[#0F6CBD]" />
               <span>AI 분석 도크 (고정)</span>
             </button>
 
+            {centerMode === 'mail' && (
+              <button
+                type="button"
+                aria-pressed={showUnreadBriefing}
+                onClick={() => setShowUnreadBriefing((v) => !v)}
+                title="최근 14일 미확인 메일 브리핑 팝업 열기/닫기"
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] border text-xs font-medium transition-colors whitespace-nowrap ${
+                  showUnreadBriefing
+                    ? 'bg-[#EDEBE9] border-[#D1D1D1] text-[#0F6CBD] font-semibold'
+                    : 'bg-white border-transparent text-[#242424] hover:bg-[#F3F2F1]'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#424242]" />
+                <span>미확인 브리핑</span>
+                {unreadBriefing && unreadBriefing.totalUnread > 0 && (
+                  <span className="px-1.5 py-0 rounded-full bg-[#F3F2F1] text-[#424242] text-[10px] font-semibold tabular-nums">
+                    {unreadBriefing.totalUnread}
+                  </span>
+                )}
+              </button>
+            )}
+
             <button
               type="button"
               aria-pressed={showAttachSplitDock}
               onClick={() => setShowAttachSplitDock((v) => !v)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] border text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] border text-xs font-medium transition-colors whitespace-nowrap ${
                 showAttachSplitDock
-                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                  : 'bg-white border-transparent text-[#242424] hover:bg-[#F5F5F5]'
+                  ? 'bg-[#EDEBE9] border-[#D1D1D1] text-[#0F6CBD] font-semibold'
+                  : 'bg-white border-transparent text-[#242424] hover:bg-[#F3F2F1]'
               }`}
             >
-              <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
+              <Paperclip className="w-3.5 h-3.5 text-[#424242]" />
               <span>첨부·폴더저장 도크</span>
             </button>
 
@@ -1897,9 +1919,9 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
               <button
                 type="button"
                 onClick={onOpenExecutiveDashboard}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[5px] bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-800 text-xs font-semibold transition-colors whitespace-nowrap"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[4px] bg-white hover:bg-[#F3F2F1] border border-transparent text-[#242424] text-xs font-medium transition-colors whitespace-nowrap"
               >
-                <FileSpreadsheet className="w-3.5 h-3.5 text-rose-700" />
+                <FileSpreadsheet className="w-3.5 h-3.5 text-[#424242]" />
                 <span>주간·월간 대시보드</span>
               </button>
             )}
@@ -2311,30 +2333,18 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
       )}
 
       {graphNotice && (
-        <div className="mx-2 mb-2 px-3.5 py-2 bg-[#EBF3FC] border border-[#B4D6FA] rounded-lg text-xs text-[#0F6CBD] font-medium flex items-center justify-between shrink-0">
-          <span>{graphNotice}</span>
+        <div className="px-3 py-1 bg-[#FAF9F8] border-b border-[#E1DFDD] text-[11px] text-[#424242] flex items-center justify-between shrink-0">
+          <span className="truncate">{graphNotice}</span>
         </div>
       )}
 
-      {showUnreadBriefing && centerMode === 'mail' && (
-        <UnreadBriefingBanner
-          emails={emails}
-          projects={projects}
-          projectMailOverrides={projectMailOverrides}
-          serverBriefing={unreadBriefing}
-          onOpenMail={(emailId) => void handleBriefingOpenOrReply(emailId, 'open')}
-          onQuickReplyMail={(emailId) => void handleBriefingOpenOrReply(emailId, 'reply')}
-          onDismiss={() => setShowUnreadBriefing(false)}
-        />
-      )}
-
-      {/* Row 3: Authentic New Outlook Fluent 2 Multi-Pane Workspace */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-2 px-2 pb-2 min-h-0 overflow-hidden">
-        {/* Pane 1: Collapsible Outlook Folder Tree (Transparent on #F5F5F5 Canvas) + Bottom Mini-Window Dock */}
+      {/* Row 3: Authentic Classic Outlook Flat 1px Divider Multi-Pane Workspace */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-0 px-0 pb-0 bg-white border-t border-[#E1DFDD] min-h-0 overflow-hidden">
+        {/* Pane 1: Collapsible Outlook Folder Tree (#FAF9F8 Classic Nav Rail) + Bottom Mini-Window Dock */}
         {showFolderPane && (
           <nav
             aria-label="Outlook 폴더"
-            className="w-full lg:w-[228px] shrink-0 bg-[#F0F0F0] border border-[#E0E0E0] rounded-lg flex lg:flex-col justify-between gap-2 overflow-x-auto lg:overflow-hidden select-none"
+            className="w-full lg:w-[224px] shrink-0 bg-[#FAF9F8] border-r border-[#E1DFDD] rounded-none flex lg:flex-col justify-between gap-2 overflow-x-auto lg:overflow-hidden select-none"
           >
             <div className="flex lg:flex-col gap-3 lg:overflow-y-auto lg:flex-1 lg:min-h-0 p-1">
             {localFolders.length > 0 && (
@@ -2761,9 +2771,9 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
         )}
 
         {/* Right Split Container: Optional Project Vault Bar + Message List + Reading Pane */}
-        <div className="flex-1 flex flex-col gap-2 min-w-0 min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col gap-0 min-w-0 min-h-0 overflow-hidden bg-white">
           {activeProject && onAddProjectSubfolder && onDeleteProjectSubfolder && onAddProjectVaultFiles && onRemoveProjectVaultFile && (
-            <div className="bg-white border border-[#E0E0E0] rounded-lg overflow-hidden shrink-0">
+            <div className="bg-white border-b border-[#E1DFDD] rounded-none overflow-hidden shrink-0">
               <ProjectVaultBar
                 project={activeProject}
                 activeSubfolderId={activeProjectSubfolderId}
@@ -2781,14 +2791,14 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
           )}
 
           <div
-            className={`flex-1 flex gap-2 min-w-0 min-h-0 overflow-hidden ${
+            className={`flex-1 flex gap-0 min-w-0 min-h-0 overflow-hidden ${
               readingPanePosition === 'bottom' ? 'flex-col' : 'flex-col lg:flex-row'
             }`}
           >
-        {/* Pane 2: Floating White Rounded Outlook Message List Card */}
+        {/* Pane 2: Classic Flat White Outlook Message List */}
         <section
           aria-label="메일 목록"
-          className={`bg-white border border-[#E0E0E0] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col min-h-[220px] lg:min-h-0 overflow-hidden ${
+          className={`bg-white border-r border-[#E1DFDD] rounded-none flex flex-col min-h-[220px] lg:min-h-0 overflow-hidden ${
             !showReadingPane
               ? 'flex-1 min-w-0'
               : readingPanePosition === 'bottom'
@@ -3415,11 +3425,11 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
           </div>
         </section>
 
-        {/* Pane 3: Floating White Rounded Outlook Reading Pane OR AI Result Viewer */}
+        {/* Pane 3: Classic Flat White Outlook Reading Pane OR AI Result Viewer */}
         {showReadingPane && (
           <section
             aria-label={centerMode === 'result' ? 'AI 분석 및 생성 문서' : '메일 읽기 창'}
-            className="flex-1 min-w-0 bg-white border border-[#E0E0E0] rounded-lg shadow-[0_1px_2px_rgba(0,0,0,0.04)] flex flex-col overflow-hidden"
+            className="flex-1 min-w-0 bg-white rounded-none flex flex-col overflow-hidden"
           >
             {centerMode === 'result' ? (
               <Suspense fallback={<div className="p-6 text-xs text-[#616161]">AI 분석 결과 불러오는 중...</div>}>
@@ -3563,23 +3573,39 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
                       >
                         <Forward className="w-4 h-4 text-[#0F6CBD]" />
                       </button>
+                      {inlineAiAnalysis && (
+                        <button
+                          type="button"
+                          onClick={() => setInlineAiExpanded((v) => !v)}
+                          title="이 메일의 즉시 요약 및 원클릭 회신 초안 펼치기/접기"
+                          aria-pressed={inlineAiExpanded}
+                          className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-[4px] border transition-colors ${
+                            inlineAiExpanded
+                              ? 'bg-[#EDEBE9] border-[#D1D1D1] text-[#0F6CBD]'
+                              : 'bg-white border-transparent text-[#616161] hover:text-[#242424] hover:bg-[#F3F2F1]'
+                          }`}
+                        >
+                          <Sparkles className="w-3 h-3 text-[#0F6CBD]" />
+                          <span>{inlineAiExpanded ? 'AI 요약 숨기기' : 'AI 요약 보기'}</span>
+                        </button>
+                      )}
                       {onShareMailToSgwChat && (
                         <button
                           type="button"
                           onClick={() => onShareMailToSgwChat(activeEmail)}
                           title="이 메일을 SGW 사내 채팅으로 공유"
                           aria-label="SGW 채팅 공유"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-[#0F6CBD] bg-[#EBF3FC] hover:bg-[#CFE4FA] rounded-[5px]"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-[#424242] hover:bg-[#F3F2F1] rounded-[4px]"
                         >
-                          <MessageSquare className="w-3.5 h-3.5" />
+                          <MessageSquare className="w-3.5 h-3.5 text-[#0F6CBD]" />
                           <span>채팅 공유</span>
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Inline Bmail Daily Mail AI Copilot Summary & 3-Option Instant Reply Strip */}
-                  {inlineAiAnalysis && (
+                  {/* Collapsible Inline Bmail AI Copilot Summary & 3-Option Instant Reply Strip (Hidden by default for clean Classic Outlook reading flow) */}
+                  {inlineAiAnalysis && inlineAiExpanded && (
                     <div className="pl-0 sm:pl-[52px]">
                       <div className="rounded-lg border border-[#D8E6F5] bg-[#F8FBFF] p-3.5 space-y-2.5">
                         <div className="flex items-center justify-between gap-2">
@@ -3601,15 +3627,14 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
                           </div>
                           <button
                             type="button"
-                            onClick={() => setInlineAiExpanded((v) => !v)}
+                            onClick={() => setInlineAiExpanded(false)}
                             className="text-[11px] font-medium text-[#0F6CBD] hover:underline whitespace-nowrap shrink-0"
                           >
-                            {inlineAiExpanded ? '접기' : '펼치기'}
+                            접기
                           </button>
                         </div>
 
-                        {inlineAiExpanded && (
-                          <div className="space-y-2.5 text-xs">
+                        <div className="space-y-2.5 text-xs">
                             <p className="text-[#242424] leading-relaxed">
                               {inlineAiAnalysis.oneLineSummary}
                             </p>
@@ -3661,7 +3686,6 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
                               </div>
                             )}
                           </div>
-                        )}
                       </div>
                     </div>
                   )}
@@ -4282,6 +4306,18 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
       )}
 
       {/* Bottom-Right Compact Floating Sales / Foreign-Language Translation & Reply Mini-Window */}
+      {centerMode === 'mail' && (
+        <UnreadBriefingBanner
+          open={showUnreadBriefing}
+          onOpenChange={setShowUnreadBriefing}
+          emails={emails}
+          projects={projects}
+          projectMailOverrides={projectMailOverrides}
+          serverBriefing={unreadBriefing}
+          onOpenMail={(emailId) => void handleBriefingOpenOrReply(emailId, 'open')}
+          onQuickReplyMail={(emailId) => void handleBriefingOpenOrReply(emailId, 'reply')}
+        />
+      )}
       {!isMiniAssistOpen && (
         <button
           type="button"
