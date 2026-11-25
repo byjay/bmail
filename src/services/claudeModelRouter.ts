@@ -22,6 +22,8 @@ export type ClaudeTaskKind =
   | 'mail-map'
   | 'mail-reduce'
   | 'document'
+  | 'doc-analysis'
+  | 'executive-report'
   | 'meeting'
   | 'sgw-assist'
   | 'quick-summary'
@@ -115,10 +117,13 @@ export function selectClaudeModelByComplexity(input: ClaudeRoutingInput = {}): C
   }
 
   const isHighComplexity =
+    taskKind === 'executive-report' ||
     promptChars >= 18000 ||
     emailCount >= 20 ||
     documentCount >= 4 ||
-    (taskKind === 'document' && documentCount >= 2 && emailCount >= 5) ||
+    ((taskKind === 'document' || taskKind === 'doc-analysis') &&
+      documentCount >= 2 &&
+      emailCount >= 5) ||
     HIGH_DIFFICULTY_RE.test(focus);
 
   if (isHighComplexity) {
@@ -137,6 +142,7 @@ export function selectClaudeModelByComplexity(input: ClaudeRoutingInput = {}): C
   const isMediumComplexity =
     taskKind === 'meeting' ||
     taskKind === 'document' ||
+    taskKind === 'doc-analysis' ||
     emailCount >= 6 ||
     documentCount >= 1 ||
     promptChars >= 5500 ||
@@ -150,7 +156,7 @@ export function selectClaudeModelByComplexity(input: ClaudeRoutingInput = {}): C
       effort: 'medium',
       useServerFallback: true,
       reason:
-        taskKind === 'meeting' || taskKind === 'document'
+        taskKind === 'meeting' || taskKind === 'document' || taskKind === 'doc-analysis'
           ? `task-${taskKind}`
           : MEDIUM_DIFFICULTY_RE.test(focus)
             ? 'medium-difficulty-keyword'

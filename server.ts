@@ -1661,9 +1661,13 @@ async function startServer() {
       const body = (req.body && typeof req.body === 'object' ? req.body : {}) as {
         to?: string | string[];
         cc?: string | string[];
+        bcc?: string | string[];
         subject?: string;
         body?: string;
         htmlBody?: string;
+        importance?: 'low' | 'normal' | 'high';
+        requestReadReceipt?: boolean;
+        attachments?: Array<{ filename?: string; contentType?: string; contentBase64?: string }>;
       };
       const toList = Array.isArray(body.to)
         ? body.to
@@ -1677,6 +1681,32 @@ async function startServer() {
             .split(/[;,]/)
             .map((s) => s.trim())
             .filter(Boolean);
+      const bccList = Array.isArray(body.bcc)
+        ? body.bcc
+        : String(body.bcc || '')
+            .split(/[;,]/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+
+      const safeAttachments: Array<{ filename: string; contentType?: string; contentBase64: string }> = [];
+      let totalAttBytes = 0;
+      if (Array.isArray(body.attachments)) {
+        for (const item of body.attachments.slice(0, 10)) {
+          const fname = String(item?.filename || '').replace(/[\r\n\0]/g, '').trim();
+          const b64 = String(item?.contentBase64 || '').replace(/\s+/g, '');
+          if (!fname || !b64) continue;
+          const approxBytes = Math.floor((b64.length * 3) / 4);
+          if (totalAttBytes + approxBytes > 20 * 1024 * 1024) {
+            throw new Error('첨부 파일 합계 용량은 20MB 이하만 발송 가능합니다.');
+          }
+          totalAttBytes += approxBytes;
+          safeAttachments.push({
+            filename: fname,
+            contentType: typeof item?.contentType === 'string' ? item.contentType : undefined,
+            contentBase64: b64,
+          });
+        }
+      }
 
       const subjectText = String(body.subject || '(제목 없음)');
       const bodyText = String(body.body || '');
@@ -1689,9 +1719,14 @@ async function startServer() {
         smtpTls: session.smtpTls,
         to: toList,
         cc: ccList,
+        bcc: bccList,
         subject: subjectText,
         body: bodyText,
         htmlBody,
+        importance:
+          body.importance === 'high' || body.importance === 'low' ? body.importance : 'normal',
+        requestReadReceipt: Boolean(body.requestReadReceipt),
+        attachments: safeAttachments,
       });
       try {
         if (localDb.isReady()) {
@@ -1739,18 +1774,23 @@ async function startServer() {
     const body = (req.body && typeof req.body === 'object' ? req.body : {}) as {
       to?: string;
       cc?: string;
+      bcc?: string;
       subject?: string;
       body?: string;
       htmlBody?: string;
       action?: 'send' | 'display';
+      importance?: 'low' | 'normal' | 'high';
+      requestReadReceipt?: boolean;
       sourceEmailId?: string;
       forwardAttachmentIndices?: number[];
+      userAttachments?: Array<{ filename?: string; contentType?: string; contentBase64?: string }>;
     };
     const toStr = String(body.to || '').trim();
     const ccStr = String(body.cc || '').trim();
+    const bccStr = String(body.bcc || '').trim();
     const subjectStr = String(body.subject || '(제목 없음)').trim();
     const action = body.action === 'display' ? 'display' : 'send';
-    if (action === 'send' && !toStr) {
+    if (action === 'send' && !toStr && !ccStr && !bccStr) {
       res.status(400).json({ error: '받는 사람 이메일 주소를 입력해 주세요.' });
       return;
     }
@@ -1798,15 +1838,38 @@ async function startServer() {
         }
       }
 
+      if (Array.isArray(body.userAttachments)) {
+        let userTotal = 0;
+        let uIdx = 0;
+        for (const ua of body.userAttachments.slice(0, 10)) {
+          const safeName = path.basename(String(ua?.filename || '')).replace(/[<>:"/\\|?*\r\n\0]/g, '_').trim();
+          const b64 = String(ua?.contentBase64 || '').replace(/\s+/g, '');
+          if (!safeName || !b64) continue;
+          const buf = Buffer.from(b64, 'base64');
+          if (userTotal + buf.length > 20 * 1024 * 1024) {
+            throw new Error('첨부 파일 합계 용량은 20MB 이하만 지원합니다.');
+          }
+          userTotal += buf.length;
+          uIdx += 1;
+          const outFile = path.join(tempDir, `u-${uIdx}-${safeName}`);
+          fs.writeFileSync(outFile, buf);
+          fileAtts.push(outFile);
+        }
+      }
+
       const payloadPath = path.join(tempDir, 'payload.json');
+      const importanceNum = body.importance === 'high' ? 2 : body.importance === 'low' ? 0 : 1;
       fs.writeFileSync(
         payloadPath,
         JSON.stringify({
           to: toStr,
           cc: ccStr,
+          bcc: bccStr,
           subject: subjectStr,
           htmlBody: cidHtml,
           action,
+          importance: importanceNum,
+          requestReadReceipt: Boolean(body.requestReadReceipt),
           inlineAtts,
           fileAtts,
         }),
@@ -1822,7 +1885,10 @@ if ($null -eq $app) { $app = New-Object -ComObject Outlook.Application }
 $mail = $app.CreateItem(0)
 if ($payload.to) { $mail.To = [string]$payload.to }
 if ($payload.cc) { $mail.CC = [string]$payload.cc }
+if ($payload.bcc) { $mail.BCC = [string]$payload.bcc }
 $mail.Subject = [string]$payload.subject
+$mail.Importance = [int]$payload.importance
+if ($payload.requestReadReceipt) { $mail.ReadReceiptRequested = $true }
 $mail.BodyFormat = 2
 $mail.HTMLBody = [string]$payload.htmlBody
 $cidProp = "http://schemas.microsoft.com/mapi/proptag/0x3712001F"
@@ -1863,6 +1929,40 @@ Write-Output 'COM_OK'
           }
         );
       });
+
+      if (action === 'send' && localDb.isReady()) {
+        try {
+          const now = new Date();
+          const sentId = `outlook-com-sent-${now.getTime()}`;
+          const toArr = toStr.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+          const ccArr = ccStr.split(/[;,]/).map((s) => s.trim()).filter(Boolean);
+          localDb.upsertEmailsBatch([
+            {
+              id: sentId,
+              storeName: 'PC Outlook COM',
+              folder: 'sent',
+              folderName: '보낸 편지함',
+              subject: subjectStr,
+              fromName: '나 (PC Outlook)',
+              fromEmail: 'me@outlook.local',
+              to: toArr,
+              cc: ccArr.length > 0 ? ccArr : undefined,
+              date: now.toISOString().slice(0, 10),
+              timestamp: now.toISOString(),
+              timeLabel: now.toTimeString().slice(0, 5),
+              snippet: String(body.body || '').slice(0, 120),
+              body: String(body.body || ''),
+              importance: body.importance === 'high' ? 'high' : 'normal',
+              hasAttachment: fileAtts.length > 0,
+              isRead: true,
+              source: 'outlook-live',
+            },
+          ]);
+          localDb.setEmailRichCache(sentId, sanitizeEmailHtml(rawHtml), []);
+        } catch {
+          // Best-effort local SQLite sent persistence
+        }
+      }
 
       res.json({ ok: true, action, attachmentsCount: fileAtts.length, inlineImagesCount: inlineAtts.length });
     } catch (err) {
@@ -2125,7 +2225,31 @@ Write-Output 'COM_OK'
   app.get('/api/admin/llm-usage', (req, res) => {
     const rawLimit = Number(req.query.limit);
     const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(50, rawLimit) : 12;
-    res.json(getLlmUsageSummary(limit));
+    const summary = getLlmUsageSummary(limit);
+    const groqStatus = getGroqKeyPoolStatus();
+    const claudeConfigured = Boolean((process.env.ANTHROPIC_API_KEY || '').trim());
+    const geminiConfigured = Boolean((process.env.GEMINI_API_KEY || '').trim());
+    res.json({
+      ...summary,
+      routingPolicy: {
+        groqSlotsConfigured: groqStatus.configuredCount,
+        groqSlotsHealthy: groqStatus.healthyCount,
+        groqParallelMax: Math.max(1, groqStatus.configuredCount),
+        claudeConfigured,
+        geminiConfigured,
+        defaultFastProvider:
+          groqStatus.configuredCount > 0
+            ? `Groq ${groqStatus.configuredCount}-키 병렬 (openai/gpt-oss-120b)`
+            : claudeConfigured
+              ? 'Claude Haiku 5.5 (Groq 미설정 폴백)'
+              : '로컬 결정론적 엔진',
+        advancedAnalysisProvider: claudeConfigured
+          ? 'Claude 5.5 (Sonnet/Opus 자동 티어)'
+          : groqStatus.configuredCount > 0
+            ? 'Groq 5-키 폴백 (Claude 키 미설정)'
+            : '로컬 결정론적 엔진',
+      },
+    });
   });
 
   app.post('/api/admin/llm-usage/reset', (_req, res) => {

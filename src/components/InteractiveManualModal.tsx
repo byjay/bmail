@@ -443,8 +443,8 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                         <span className="px-2 py-0.5 rounded bg-emerald-600 text-white font-semibold">
                           신규 메일만 증분 업데이트 완료 (+4건)
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-purple-600 text-white font-semibold">
-                          Claude 5.5 분석글 생성
+                        <span className="px-2 py-0.5 rounded bg-sky-700 text-white font-semibold">
+                          고속·병렬 Groq 5-키 / 고급 Claude 5.5
                         </span>
                       </div>
                     </div>

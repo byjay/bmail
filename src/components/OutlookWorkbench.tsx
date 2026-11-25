@@ -122,7 +122,11 @@ import {
   type MailPriorityLevel,
 } from '../utils/mailPriority';
 import type { UnreadPriorityBriefing } from '../services/unreadBriefingEngine';
-import type { ComposeDraftState, OutlookSignatureEntry } from './OutlookComposeWindow';
+import type {
+  ComposeDraftState,
+  OutlookContactEntry,
+  OutlookSignatureEntry,
+} from './OutlookComposeWindow';
 import { OutlookStoreFolderTree } from './OutlookStoreFolderTree';
 import { OutlookTaskpane } from './OutlookTaskpane';
 import { ProjectVaultBar } from './ProjectVaultBar';
@@ -235,9 +239,13 @@ interface OutlookWorkbenchProps {
   onSendViaSmtp?: (payload: {
     to: string;
     cc: string;
+    bcc?: string;
     subject: string;
     body: string;
     htmlBody?: string;
+    importance?: 'low' | 'normal' | 'high';
+    requestReadReceipt?: boolean;
+    attachments?: Array<{ filename: string; contentType?: string; contentBase64: string }>;
   }) => Promise<{ ok: boolean; message: string }>;
   localDbAvailable?: boolean;
   localTotalEmails?: number;
@@ -265,6 +273,7 @@ interface OutlookWorkbenchProps {
   onDiscoverOutlookSettings?: () => Promise<void> | void;
   isDiscoveringOutlookSettings?: boolean;
   localSignatures?: OutlookSignatureEntry[];
+  localContacts?: OutlookContactEntry[];
 }
 
 type BuiltInFolder =
@@ -400,6 +409,7 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
   onDiscoverOutlookSettings,
   isDiscoveringOutlookSettings = false,
   localSignatures = [],
+  localContacts = [],
   isSyncingLiveOutlook = false,
   onSyncLiveOutlook,
   onOpenManual,
@@ -3961,6 +3971,7 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
             mode="modal"
             draft={composePopup}
             signatures={localSignatures}
+            contacts={localContacts}
             outlookPrefs={outlookPrefs}
             pop3ConnectedEmail={pop3ConnectedEmail}
             onSendSmtp={onSendViaSmtp}

@@ -7,6 +7,7 @@ import {
   collectGroqApiKeys,
   DEFAULT_GROQ_MODEL,
   GroqKeyRotator,
+  runGroqParallelBatch,
   shouldEscalateToClaude,
 } from './groqKeyRotator';
 
@@ -199,4 +200,69 @@ test('collectGroqApiKeys loads plain 1-key-per-line groq-keys.txt ignoring comme
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('collectGroqApiKeys parses comma-separated 5 keys on a single line', () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bmail-groq-csv-'));
+  try {
+    const keysFile = path.join(tmpDir, 'groq-keys.txt');
+    fs.writeFileSync(
+      keysFile,
+      '# comma list\ngsk_csv_one_123456, gsk_csv_two_123456, gsk_csv_three_1234, gsk_csv_four_12345, gsk_csv_five_12345\n',
+      'utf8'
+    );
+    const keys = collectGroqApiKeys({ BMAIL_GROQ_KEYS_FILE: keysFile }, {});
+    assert.deepEqual(keys, [
+      'gsk_csv_one_123456',
+      'gsk_csv_two_123456',
+      'gsk_csv_three_1234',
+      'gsk_csv_four_12345',
+      'gsk_csv_five_12345',
+    ]);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('runGroqParallelBatch executes up to 5 workers concurrently while preserving output order', async () => {
+  const envOverrides = {
+    GROQ_API_KEY_1: 'gsk_par_1_abcdef12',
+    GROQ_API_KEY_2: 'gsk_par_2_abcdef12',
+    GROQ_API_KEY_3: 'gsk_par_3_abcdef12',
+    GROQ_API_KEY_4: 'gsk_par_4_abcdef12',
+    GROQ_API_KEY_5: 'gsk_par_5_abcdef12',
+  };
+  let active = 0;
+  let peakActive = 0;
+  const items = [10, 20, 30, 40, 50, 60];
+
+  const results = await runGroqParallelBatch(
+    items,
+    async (item, index) => {
+      active += 1;
+      peakActive = Math.max(peakActive, active);
+      await new Promise((r) => setTimeout(r, (items.length - index) * 8));
+      active -= 1;
+      return `${index}:${item * 2}`;
+    },
+    { envOverrides }
+  );
+
+  assert.equal(peakActive >= 3 && peakActive <= 5, true, `Expected parallel concurrency 3..5, got ${peakActive}`);
+  assert.deepEqual(results, ['0:20', '1:40', '2:60', '3:80', '4:100', '5:120']);
+});
+
+test('shouldEscalateToClaude sends advanced analysis to Claude while keeping fast map-chunks on Groq', () => {
+  assert.equal(
+    shouldEscalateToClaude({ routing: { taskKind: 'executive-report', promptChars: 1200 } }),
+    true
+  );
+  assert.equal(
+    shouldEscalateToClaude({ routing: { taskKind: 'doc-analysis', promptChars: 1200 } }),
+    true
+  );
+  assert.equal(
+    shouldEscalateToClaude({ routing: { taskKind: 'mail-map', emailCount: 50, promptChars: 5500 } }),
+    false
+  );
 });

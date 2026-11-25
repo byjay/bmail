@@ -659,6 +659,12 @@ export interface Pop3FetchResult {
   banner: string;
 }
 
+export interface SmtpAttachmentInput {
+  filename: string;
+  contentType?: string;
+  contentBase64: string;
+}
+
 export interface SmtpSendParams {
   email: string;
   password: string;
@@ -667,9 +673,13 @@ export interface SmtpSendParams {
   smtpTls: boolean;
   to: string[];
   cc?: string[];
+  bcc?: string[];
   subject: string;
   body: string;
   htmlBody?: string;
+  importance?: 'low' | 'normal' | 'high';
+  requestReadReceipt?: boolean;
+  attachments?: SmtpAttachmentInput[];
   timeoutMs?: number;
   allowLoopbackForTest?: boolean;
 }
@@ -1923,6 +1933,8 @@ function wrapBase6476(b64: string): string {
  * Builds an RFC 5322 / MIME SMTP DATA payload. When `htmlBody` is provided, emits
  * `multipart/alternative` (`text/plain` + `text/html` or `multipart/related` with
  * inline `cid:` parts extracted from embedded `data:image/...;base64,...` business card images).
+ * Supports `importance`, `requestReadReceipt` (`Disposition-Notification-To`), and
+ * `multipart/mixed` file attachments. (`bcc` is delivered via SMTP RCPT TO only and never leaked.)
  */
 export function buildSmtpMimePayload(params: {
   from: string;
@@ -1931,6 +1943,9 @@ export function buildSmtpMimePayload(params: {
   subject: string;
   textBody: string;
   htmlBody?: string;
+  importance?: 'low' | 'normal' | 'high';
+  requestReadReceipt?: boolean;
+  attachments?: SmtpAttachmentInput[];
 }): string {
   const ccList = params.cc || [];
   const baseHeaders = [
@@ -1940,100 +1955,140 @@ export function buildSmtpMimePayload(params: {
     `Subject: ${encodeMimeHeaderUtf8(params.subject)}`,
     `Date: ${new Date().toUTCString()}`,
     'MIME-Version: 1.0',
+    ...(params.importance === 'high'
+      ? ['Importance: high', 'X-Priority: 1 (Highest)']
+      : params.importance === 'low'
+        ? ['Importance: low', 'X-Priority: 5 (Lowest)']
+        : []),
+    ...(params.requestReadReceipt ? [`Disposition-Notification-To: <${params.from}>`] : []),
   ];
 
   const html = String(params.htmlBody || '').trim();
   const normalizedText = String(params.textBody || '').replace(/\r?\n/g, '\r\n');
-
-  if (!html) {
-    const dotStuffedBody = normalizedText.replace(/(^|\r\n)\./g, '$1..');
-    return [
-      ...baseHeaders,
-      'Content-Type: text/plain; charset=UTF-8',
-      'Content-Transfer-Encoding: 8bit',
-      '',
-      dotStuffedBody,
-      '.',
-    ].join('\r\n');
-  }
-
-  const inlineImages: Array<{ cid: string; mimeType: string; base64Data: string }> = [];
-  let imgCounter = 0;
-  const cidHtml = html.replace(
-    /(src\s*=\s*)(["'])(data:image\/([a-z0-9+.-]+);base64,([A-Za-z0-9+/=\s]+))\2/gi,
-    (_full, attrPrefix: string, quote: string, _uri: string, subtype: string, rawB64: string) => {
-      imgCounter += 1;
-      const cid = `img${imgCounter}@bmail.local`;
-      const cleanMime = `image/${String(subtype || 'png').toLowerCase()}`;
-      inlineImages.push({
-        cid,
-        mimeType: cleanMime,
-        base64Data: rawB64.replace(/\s+/g, ''),
-      });
-      return `${attrPrefix}${quote}cid:${cid}${quote}`;
-    }
+  const fileAttachments = (params.attachments || []).filter(
+    (att) => att && att.filename && att.contentBase64
   );
 
-  const randSuffix = crypto.randomBytes(6).toString('hex');
-  const altBoundary = `----=_Alt_${randSuffix}`;
-  const relBoundary = `----=_Rel_${randSuffix}`;
-
-  const textPart = [
-    `--${altBoundary}`,
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    wrapBase6476(Buffer.from(normalizedText || '(HTML 메일)', 'utf8').toString('base64')),
-  ].join('\r\n');
-
-  const wrappedHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Malgun Gothic','Segoe UI',sans-serif;font-size:10pt;color:#242424;">${cidHtml}</body></html>`;
-  const htmlB64 = wrapBase6476(Buffer.from(wrappedHtml, 'utf8').toString('base64'));
-
-  let richSection: string;
-  if (inlineImages.length > 0) {
-    const imgParts = inlineImages.map((img) =>
-      [
-        `--${relBoundary}`,
-        `Content-Type: ${img.mimeType}; name="${img.cid.split('@')[0]}"`,
-        'Content-Transfer-Encoding: base64',
-        `Content-ID: <${img.cid}>`,
-        'Content-Disposition: inline',
-        '',
-        wrapBase6476(img.base64Data),
-      ].join('\r\n')
-    );
-
-    richSection = [
-      `--${altBoundary}`,
-      `Content-Type: multipart/related; type="text/html"; boundary="${relBoundary}"`,
-      '',
-      `--${relBoundary}`,
-      'Content-Type: text/html; charset=UTF-8',
+  let bodyEntity: string;
+  if (!html) {
+    const dotSafeText = normalizedText.replace(/(^|\r\n)\./g, '$1..');
+    bodyEntity = [
+      'Content-Type: text/plain; charset=UTF-8',
       'Content-Transfer-Encoding: base64',
       '',
-      htmlB64,
-      ...imgParts,
-      `--${relBoundary}--`,
+      wrapBase6476(Buffer.from(dotSafeText || '', 'utf8').toString('base64')),
     ].join('\r\n');
   } else {
-    richSection = [
+    const inlineImages: Array<{ cid: string; mimeType: string; base64Data: string }> = [];
+    let imgCounter = 0;
+    const cidHtml = html.replace(
+      /(src\s*=\s*)(["'])(data:image\/([a-z0-9+.-]+);base64,([A-Za-z0-9+/=\s]+))\2/gi,
+      (_full, attrPrefix: string, quote: string, _uri: string, subtype: string, rawB64: string) => {
+        imgCounter += 1;
+        const cid = `img${imgCounter}@bmail.local`;
+        const cleanMime = `image/${String(subtype || 'png').toLowerCase()}`;
+        inlineImages.push({
+          cid,
+          mimeType: cleanMime,
+          base64Data: rawB64.replace(/\s+/g, ''),
+        });
+        return `${attrPrefix}${quote}cid:${cid}${quote}`;
+      }
+    );
+
+    const randSuffix = crypto.randomBytes(6).toString('hex');
+    const altBoundary = `----=_Alt_${randSuffix}`;
+    const relBoundary = `----=_Rel_${randSuffix}`;
+
+    const textPart = [
       `--${altBoundary}`,
-      'Content-Type: text/html; charset=UTF-8',
+      'Content-Type: text/plain; charset=UTF-8',
       'Content-Transfer-Encoding: base64',
       '',
-      htmlB64,
+      wrapBase6476(Buffer.from(normalizedText || '(HTML 메일)', 'utf8').toString('base64')),
+    ].join('\r\n');
+
+    const wrappedHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:'Malgun Gothic','Segoe UI',sans-serif;font-size:10pt;color:#242424;">${cidHtml}</body></html>`;
+    const htmlB64 = wrapBase6476(Buffer.from(wrappedHtml, 'utf8').toString('base64'));
+
+    let richSection: string;
+    if (inlineImages.length > 0) {
+      const imgParts = inlineImages.map((img) =>
+        [
+          `--${relBoundary}`,
+          `Content-Type: ${img.mimeType}; name="${img.cid.split('@')[0]}"`,
+          'Content-Transfer-Encoding: base64',
+          `Content-ID: <${img.cid}>`,
+          'Content-Disposition: inline',
+          '',
+          wrapBase6476(img.base64Data),
+        ].join('\r\n')
+      );
+
+      richSection = [
+        `--${altBoundary}`,
+        `Content-Type: multipart/related; type="text/html"; boundary="${relBoundary}"`,
+        '',
+        `--${relBoundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        htmlB64,
+        ...imgParts,
+        `--${relBoundary}--`,
+      ].join('\r\n');
+    } else {
+      richSection = [
+        `--${altBoundary}`,
+        'Content-Type: text/html; charset=UTF-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        htmlB64,
+      ].join('\r\n');
+    }
+
+    bodyEntity = [
+      `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+      '',
+      textPart,
+      richSection,
+      `--${altBoundary}--`,
     ].join('\r\n');
   }
 
-  const fullMime = [
-    ...baseHeaders,
-    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
-    '',
-    textPart,
-    richSection,
-    `--${altBoundary}--`,
-    '',
-  ].join('\r\n');
+  let fullMime: string;
+  if (fileAttachments.length === 0) {
+    fullMime = [...baseHeaders, bodyEntity, ''].join('\r\n');
+  } else {
+    const mixSuffix = crypto.randomBytes(6).toString('hex');
+    const mixedBoundary = `----=_Mix_${mixSuffix}`;
+    const attParts = fileAttachments.map((att) => {
+      const cleanName = assertNoCrlf(att.filename, '첨부 파일명').replace(/"/g, '_');
+      const encodedName = encodeMimeHeaderUtf8(cleanName);
+      const cleanMime = String(att.contentType || 'application/octet-stream')
+        .replace(/[\r\n\0"]/g, '')
+        .trim() || 'application/octet-stream';
+      return [
+        `--${mixedBoundary}`,
+        `Content-Type: ${cleanMime}; name="${encodedName}"`,
+        'Content-Transfer-Encoding: base64',
+        `Content-Disposition: attachment; filename="${encodedName}"`,
+        '',
+        wrapBase6476(att.contentBase64),
+      ].join('\r\n');
+    });
+
+    fullMime = [
+      ...baseHeaders,
+      `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
+      '',
+      `--${mixedBoundary}`,
+      bodyEntity,
+      ...attParts,
+      `--${mixedBoundary}--`,
+      '',
+    ].join('\r\n');
+  }
 
   const dotStuffedMime = fullMime.replace(/(^|\r\n)\./g, '$1..');
   return `${dotStuffedMime}\r\n.`;
@@ -2055,6 +2110,9 @@ export async function sendSmtpMessage(params: SmtpSendParams): Promise<{ accepte
     .filter((addr) => extractDomainFromEmail(addr) !== '');
   const ccList = (params.cc || [])
     .map((addr) => assertNoCrlf(addr, '참조'))
+    .filter((addr) => extractDomainFromEmail(addr) !== '');
+  const bccList = (params.bcc || [])
+    .map((addr) => assertNoCrlf(addr, '숨은 참조'))
     .filter((addr) => extractDomainFromEmail(addr) !== '');
 
   if (recipients.length === 0) {
@@ -2133,7 +2191,7 @@ export async function sendSmtpMessage(params: SmtpSendParams): Promise<{ accepte
       throw new Error(`SMTP 발신자 거부: ${mailFromResp.text}`);
     }
 
-    const allRecipients = [...recipients, ...ccList];
+    const allRecipients = Array.from(new Set([...recipients, ...ccList, ...bccList]));
     for (const rcpt of allRecipients) {
       reader.send(`RCPT TO:<${rcpt}>`);
       const rcptResp = await readSmtpReply(reader);
@@ -2155,6 +2213,9 @@ export async function sendSmtpMessage(params: SmtpSendParams): Promise<{ accepte
       subject,
       textBody: body,
       htmlBody: params.htmlBody,
+      importance: params.importance,
+      requestReadReceipt: params.requestReadReceipt,
+      attachments: params.attachments,
     });
 
     reader.send(mimePayload);

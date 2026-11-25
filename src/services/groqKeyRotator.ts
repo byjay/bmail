@@ -158,19 +158,70 @@ export function sanitizeGroqError(message: string, apiKey?: string): string {
 }
 
 /**
- * Escalates to Claude ONLY when explicitly requested, high-performance is needed,
- * complexity tier resolves to `high`, or prompt volume exceeds safe single-pass Groq context.
+ * Escalates to Claude for advanced analysis (executive reports, multi-doc analysis, meetings,
+ * medium/high reduce volumes, explicit Claude/highPerformance, or large prompts), while keeping
+ * fast single-mail & parallel map chunks on the Groq 5-key pool.
  */
 export function shouldEscalateToClaude(input: ClaudeEscalationCheckInput = {}): boolean {
   if (input.explicitProvider === 'claude') return true;
   if (input.highPerformance === true) return true;
   const effectiveChars = Number(input.promptChars ?? input.routing?.promptChars ?? 0);
   if (effectiveChars > 18000) return true;
+  const taskKind = input.routing?.taskKind;
+  if (taskKind === 'mail-map' || taskKind === 'quick-summary') {
+    // Keep parallel map chunks & quick summaries fast on Groq unless highPerformance/huge prompt
+    return false;
+  }
+  if (
+    taskKind === 'executive-report' ||
+    taskKind === 'doc-analysis' ||
+    taskKind === 'document' ||
+    taskKind === 'meeting'
+  ) {
+    return true;
+  }
+  if (taskKind === 'mail-reduce' && Number(input.routing?.emailCount ?? 0) >= 6) {
+    return true;
+  }
   if (input.routing) {
     const decision = selectClaudeModelByComplexity(input.routing);
     if (decision.tier === 'high') return true;
   }
   return false;
+}
+
+/**
+ * Executes a batch of AI tasks in parallel across up to all configured Groq API key slots
+ * (default concurrency = min(items.length, max(1, configuredGroqKeys)), capped at 5).
+ */
+export async function runGroqParallelBatch<T, R>(
+  items: readonly T[],
+  worker: (item: T, index: number) => Promise<R>,
+  options?: {
+    maxConcurrency?: number;
+    envOverrides?: Record<string, string | undefined>;
+  }
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const poolCount = Math.max(1, getGroqKeyPoolStatus(options?.envOverrides).configuredCount);
+  const concurrency = Math.max(
+    1,
+    Math.min(items.length, options?.maxConcurrency ?? poolCount, MAX_GROQ_KEY_SLOTS)
+  );
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  const runners = Array.from({ length: concurrency }, async () => {
+    while (true) {
+      const idx = cursor;
+      cursor += 1;
+      if (idx >= items.length) return;
+      results[idx] = await worker(items[idx], idx);
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
 }
 
 interface ParsedSseResult {

@@ -38,6 +38,7 @@ import type {
   ExecutivePeriodType,
   SavedExecutiveReportSnapshot,
 } from '../services/executiveReportEngine';
+import { AdminLlmUsageCompactCard } from './AdminLlmUsageCompactCard';
 import { DailyBriefingTimeline } from './DailyBriefingTimeline';
 import { DashboardEfficiencyCharts } from './DashboardEfficiencyCharts';
 
@@ -804,6 +805,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div className="text-[11px] text-slate-500 mt-0.5">{kpis.dateRangeLabel}</div>
         </div>
       </div>
+
+      {/* Live API Provider Routing & Call-Volume Graphs */}
+      <AdminLlmUsageCompactCard defaultExpanded />
 
       {/* Sub-Tab Navigation */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E0E0E0] pb-2">

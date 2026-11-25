@@ -453,3 +453,33 @@ test('buildSmtpMimePayload embeds inline base64 signature images as multipart/re
   assert.ok(mime.endsWith('\r\n.'));
 });
 
+test('buildSmtpMimePayload wraps multipart/mixed attachments, importance, and read receipt headers cleanly', () => {
+  const pngB64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+  const pdfB64 = Buffer.from('%PDF-1.4\n%test', 'utf8').toString('base64');
+  const mime = buildSmtpMimePayload({
+    from: 'designsir@seastargo.com',
+    to: ['client@example.com'],
+    subject: 'RE: 수정POS 및 명함 첨부 발송',
+    textBody: '첨부 확인 부탁드립니다.',
+    htmlBody: `<p>첨부 확인 부탁드립니다.</p><img src="data:image/png;base64,${pngB64}">`,
+    importance: 'high',
+    requestReadReceipt: true,
+    attachments: [
+      {
+        filename: 'H042_도면목록.pdf',
+        contentType: 'application/pdf',
+        contentBase64: pdfB64,
+      },
+    ],
+  });
+
+  assert.ok(mime.includes('Importance: high'));
+  assert.ok(mime.includes('Disposition-Notification-To: <designsir@seastargo.com>'));
+  assert.ok(mime.includes('multipart/mixed;'));
+  assert.ok(mime.includes('multipart/related; type="text/html"'));
+  assert.ok(mime.includes('Content-Disposition: attachment; filename="=?UTF-8?B?'));
+  assert.equal(mime.includes('Bcc:'), false);
+  assert.ok(mime.endsWith('\r\n.'));
+});
+

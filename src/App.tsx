@@ -33,7 +33,11 @@ import { GlobalSearchFilterDropdown } from './components/GlobalSearchFilterDropd
 import type { LocalFolderRecord } from './services/localMailDb';
 import type { OutlookFavoriteLink } from './services/localOutlookMigrator';
 import type { UnreadPriorityBriefing } from './services/unreadBriefingEngine';
-import type { ComposeDraftState, OutlookSignatureEntry } from './components/OutlookComposeWindow';
+import type {
+  ComposeDraftState,
+  OutlookContactEntry,
+  OutlookSignatureEntry,
+} from './components/OutlookComposeWindow';
 import { OutlookTaskpane } from './components/OutlookTaskpane';
 import { OutlookWorkbench, type OutlookDraftItem } from './components/OutlookWorkbench';
 import type { Pop3ConnectedAccount } from './components/Pop3QuickConnectModal';
@@ -863,6 +867,16 @@ export default function App() {
           folders: (data.folders || []).map((f) => f.folderPath),
           signatureNames: (data.signatures || []).map((s) => s.name),
         });
+        if (Array.isArray(data.contacts) && data.contacts.length > 0) {
+          try {
+            window.localStorage.setItem(
+              'bmail_local_contacts_cache',
+              JSON.stringify(data.contacts.slice(0, 500))
+            );
+          } catch {
+            // ignore storage quota
+          }
+        }
       }
 
       if (Array.isArray(data.projects) && data.projects.length > 0) {
@@ -2545,9 +2559,13 @@ export default function App() {
     async (payload: {
       to: string;
       cc: string;
+      bcc?: string;
       subject: string;
       body: string;
       htmlBody?: string;
+      importance?: 'low' | 'normal' | 'high';
+      requestReadReceipt?: boolean;
+      attachments?: Array<{ filename: string; contentType?: string; contentBase64: string }>;
     }): Promise<{ ok: boolean; message: string }> => {
       if (!pop3SessionToken || !pop3Account) {
         return { ok: false, message: '연결된 POP3/SMTP 계정이 없습니다.' };
@@ -3145,6 +3163,7 @@ export default function App() {
       subject: '',
     };
     let cachedSigs: OutlookSignatureEntry[] = localSignatures;
+    let cachedContacts: OutlookContactEntry[] = outlookPcProfile?.contacts || [];
     if (typeof window !== 'undefined') {
       try {
         if (draftKey) {
@@ -3157,6 +3176,10 @@ export default function App() {
           const rawSigs = window.localStorage.getItem('bmail_local_signatures_cache');
           if (rawSigs) cachedSigs = JSON.parse(rawSigs) as OutlookSignatureEntry[];
         }
+        if (cachedContacts.length === 0) {
+          const rawContacts = window.localStorage.getItem('bmail_local_contacts_cache');
+          if (rawContacts) cachedContacts = JSON.parse(rawContacts) as OutlookContactEntry[];
+        }
       } catch {
         // ignore storage parse fallback
       }
@@ -3167,6 +3190,7 @@ export default function App() {
           mode="standalone"
           draft={initialComposeDraft}
           signatures={cachedSigs}
+          contacts={cachedContacts}
           outlookPrefs={outlookPrefs}
           pop3ConnectedEmail={pop3Account?.email || null}
           onSendSmtp={handleSendViaPop3Smtp}
@@ -3972,6 +3996,7 @@ export default function App() {
               onDiscoverOutlookSettings={() => void handleDiscoverOutlookSettings()}
               isDiscoveringOutlookSettings={isDiscoveringOutlookSettings}
               localSignatures={localSignatures}
+              localContacts={outlookPcProfile?.contacts || []}
             />
           )}
 

@@ -1,25 +1,59 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
+  BarChart3,
   ChevronDown,
   ChevronUp,
   Cpu,
   RefreshCw,
   RotateCcw,
 } from 'lucide-react';
-import type { LlmUsageSummary } from '../services/llmUsageTracker';
+import type { LlmProviderFamily, LlmUsageSummary } from '../services/llmUsageTracker';
 
-export const AdminLlmUsageCompactCard: React.FC = () => {
-  const [summary, setSummary] = useState<LlmUsageSummary | null>(null);
+export interface AdminLlmRoutingPolicy {
+  groqSlotsConfigured: number;
+  groqSlotsHealthy: number;
+  groqParallelMax: number;
+  claudeConfigured: boolean;
+  geminiConfigured: boolean;
+  defaultFastProvider: string;
+  advancedAnalysisProvider: string;
+}
+
+interface LlmUsageApiResponse extends LlmUsageSummary {
+  routingPolicy?: AdminLlmRoutingPolicy;
+}
+
+export interface AdminLlmUsageCompactCardProps {
+  defaultExpanded?: boolean;
+}
+
+const PROVIDER_META: Array<{
+  id: LlmProviderFamily;
+  label: string;
+  barColor: string;
+  badgeBg: string;
+}> = [
+  { id: 'groq', label: 'Groq (고속·병렬)', barColor: '#F55036', badgeBg: 'bg-orange-50 text-orange-800 border-orange-200' },
+  { id: 'claude', label: 'Claude 5.5 (고급·심층)', barColor: '#7C3AED', badgeBg: 'bg-purple-50 text-purple-800 border-purple-200' },
+  { id: 'gemini', label: 'Gemini (백업·멀티)', barColor: '#0F6CBD', badgeBg: 'bg-[#EBF3FC] text-[#0F6CBD] border-[#B4D6FA]' },
+  { id: 'openai', label: 'OpenAI (보조)', barColor: '#0D9488', badgeBg: 'bg-teal-50 text-teal-800 border-teal-200' },
+  { id: 'agent-builder', label: 'Agent Builder RAG', barColor: '#475569', badgeBg: 'bg-slate-100 text-slate-700 border-slate-200' },
+];
+
+export const AdminLlmUsageCompactCard: React.FC<AdminLlmUsageCompactCardProps> = ({
+  defaultExpanded = false,
+}) => {
+  const [summary, setSummary] = useState<LlmUsageApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   const fetchUsage = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/llm-usage?limit=8');
+      const res = await fetch('/api/admin/llm-usage?limit=12');
       if (res.ok) {
-        const data = (await res.json()) as LlmUsageSummary;
+        const data = (await res.json()) as LlmUsageApiResponse;
         setSummary(data);
       }
     } catch {
@@ -63,7 +97,21 @@ export const AdminLlmUsageCompactCard: React.FC = () => {
     costUsd: 0,
   };
   const byModel = summary?.byModel || [];
+  const byProvider = summary?.byProvider;
+  const dailyBuckets = summary?.dailyBuckets || [];
   const recentEvents = summary?.recentEvents || [];
+  const policy = summary?.routingPolicy;
+
+  const providerRows = PROVIDER_META.map((meta) => {
+    const stat = byProvider?.[meta.id] || { calls: 0, totalTokens: 0, costUsd: 0 };
+    return { ...meta, ...stat };
+  });
+  const totalProviderCalls = Math.max(
+    1,
+    providerRows.reduce((sum, r) => sum + r.calls, 0)
+  );
+  const chartBuckets = dailyBuckets.slice(-14);
+  const maxDailyCalls = Math.max(1, ...chartBuckets.map((b) => b.calls));
 
   const formatNum = (n: number) => n.toLocaleString('ko-KR');
   const formatUsd = (n: number) =>
@@ -163,23 +211,136 @@ export const AdminLlmUsageCompactCard: React.FC = () => {
         </div>
       </div>
 
-      {/* Compact Model Breakdown Pills (always visible if models exist, 1 compact line) */}
-      {byModel.length > 0 && !expanded && (
-        <div className="mt-2 pt-2 border-t border-[#F0F0F0] flex flex-wrap items-center gap-1.5 text-[10px]">
-          <span className="text-[#707070] font-medium mr-1">모델별:</span>
-          {byModel.slice(0, 5).map((m) => (
-            <span
-              key={`${m.provider}-${m.modelId}`}
-              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border font-mono ${tierBadge(m.tier)}`}
-            >
-              <strong className="font-semibold">{m.modelId}</strong>
-              <span>· {formatNum(m.calls)}회</span>
-              <span>· {formatNum(m.totalTokens)} tok</span>
-              <span>· {formatUsd(m.costUsd)}</span>
+      {/* Live API Routing Policy Badges + Interactive Call-Volume Graphs */}
+      <div className="mt-2.5 pt-2.5 border-t border-[#F0F0F0] space-y-2.5">
+        {policy && (
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border bg-orange-50 border-orange-200 text-orange-900 font-semibold">
+              <span>고속·병렬 처리:</span>
+              <span>{policy.defaultFastProvider}</span>
             </span>
-          ))}
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border bg-purple-50 border-purple-200 text-purple-900 font-semibold">
+              <span>고급·심층 분석:</span>
+              <span>{policy.advancedAnalysisProvider}</span>
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border text-[10px] font-mono ${
+                policy.groqSlotsConfigured > 0
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+            >
+              Groq 키 슬롯: {policy.groqSlotsHealthy}/{policy.groqSlotsConfigured} 활성 (최대{' '}
+              {policy.groqParallelMax}병렬)
+            </span>
+          </div>
+        )}
+
+        {/* Two Side-by-Side Call Volume Charts (Always Visible) */}
+        <div
+          data-testid="llm-usage-graphs"
+          className="grid grid-cols-1 lg:grid-cols-2 gap-3 text-[11px]"
+        >
+          {/* Graph 1: Provider Call Volume Share Bars */}
+          <div className="p-2.5 rounded-[6px] border border-[#E5E5E5] bg-[#FAF9F8]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-bold text-[#242424] flex items-center gap-1.5">
+                <BarChart3 className="w-3.5 h-3.5 text-[#0F6CBD]" />
+                프로바이더별 AI API 호출량 분포
+              </span>
+              <span className="text-[10px] font-mono text-[#616161]">
+                총 {formatNum(totals.totalCalls)}회
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              {providerRows.map((row) => {
+                const pct = totals.totalCalls > 0 ? Math.round((row.calls / totalProviderCalls) * 100) : 0;
+                const widthPct = row.calls > 0 ? Math.max(4, pct) : 0;
+                return (
+                  <div key={row.id} className="space-y-0.5">
+                    <div className="flex items-center justify-between text-[10px]">
+                      <span className="font-semibold text-[#242424]">{row.label}</span>
+                      <span className="font-mono text-[#424242]">
+                        {formatNum(row.calls)}회 ({pct}%) · {formatNum(row.totalTokens)} tok ·{' '}
+                        {formatUsd(row.costUsd)}
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-white border border-[#E1DFDD] overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${widthPct}%`, backgroundColor: row.barColor }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Graph 2: Daily Call Volume SVG Bar Chart */}
+          <div className="p-2.5 rounded-[6px] border border-[#E5E5E5] bg-[#FAF9F8] flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="font-bold text-[#242424] flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-purple-700" />
+                일자별 API 호출 추이 그래프 (최근 {chartBuckets.length || 0}일)
+              </span>
+              <span className="text-[10px] font-mono text-[#616161]">
+                최대 {formatNum(maxDailyCalls)}회/일
+              </span>
+            </div>
+            {chartBuckets.length === 0 ? (
+              <div className="h-[88px] flex items-center justify-center text-[11px] text-[#707070] bg-white rounded border border-dashed border-[#D1D1D1]">
+                AI 분석 또는 메일 요약을 실행하면 일별 API 호출량 그래프가 표시됩니다.
+              </div>
+            ) : (
+              <div className="bg-white rounded border border-[#E1DFDD] px-2 pt-2 pb-1">
+                <svg
+                  viewBox="0 0 360 88"
+                  role="img"
+                  aria-label="일자별 AI API 호출량 그래프"
+                  className="w-full h-[88px]"
+                >
+                  {chartBuckets.map((bucket, idx) => {
+                    const slotW = 340 / Math.max(1, chartBuckets.length);
+                    const barW = Math.min(22, Math.max(8, slotW * 0.62));
+                    const x = 10 + idx * slotW + (slotW - barW) / 2;
+                    const barH = Math.max(4, Math.round((bucket.calls / maxDailyCalls) * 56));
+                    const y = 66 - barH;
+                    return (
+                      <g key={bucket.date}>
+                        <rect x={x} y={y} width={barW} height={barH} rx={2.5} fill="#0F6CBD">
+                          <title>
+                            {bucket.date}: {bucket.calls}회 · {formatNum(bucket.totalTokens)} tok
+                          </title>
+                        </rect>
+                        <text
+                          x={x + barW / 2}
+                          y={Math.max(10, y - 3)}
+                          textAnchor="middle"
+                          fontSize="8.5"
+                          fill="#242424"
+                          fontWeight="600"
+                        >
+                          {bucket.calls}
+                        </text>
+                        <text
+                          x={x + barW / 2}
+                          y={81}
+                          textAnchor="middle"
+                          fontSize="8"
+                          fill="#616161"
+                        >
+                          {bucket.date.slice(5)}
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Expandable Compact Table for Per-Model & Recent Calls */}
       {expanded && (

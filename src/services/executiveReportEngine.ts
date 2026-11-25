@@ -787,7 +787,28 @@ export async function generateAiExecutiveNarrative(
     let rawText = '';
     let generatedBy = '';
 
-    if (groqConfigured) {
+    // Advanced Executive Deep Analysis -> Claude 5.5 first (with automatic fallback to Groq)
+    if (effectiveClaudeKey) {
+      try {
+        const res = await invokeClaudeMessagesApi({
+          apiKey: effectiveClaudeKey,
+          routing: {
+            taskKind: 'executive-report',
+            promptChars: userPrompt.length,
+            customFocus: '주간 월간 경영진 심층 분석 보고서',
+          },
+          systemPrompt,
+          userPrompt,
+          maxTokens: 1600,
+        });
+        rawText = res.text;
+        generatedBy = `Claude · ${res.model}`;
+      } catch {
+        // Fall back to Groq below
+      }
+    }
+
+    if (!rawText && groqConfigured) {
       try {
         const groqRes = await invokeGroqStreamingCompletion({
           systemPrompt,
@@ -799,24 +820,8 @@ export async function generateAiExecutiveNarrative(
         rawText = groqRes.text;
         generatedBy = groqRes.model;
       } catch {
-        // Fail over to Claude below
+        // Return deterministic narrative fallback below
       }
-    }
-
-    if (!rawText && effectiveClaudeKey) {
-      const res = await invokeClaudeMessagesApi({
-        apiKey: effectiveClaudeKey,
-        routing: {
-          taskKind: 'mail-reduce',
-          promptChars: userPrompt.length,
-          customFocus: '주간 월간 보고서 분석',
-        },
-        systemPrompt,
-        userPrompt,
-        maxTokens: 1600,
-      });
-      rawText = res.text;
-      generatedBy = `Claude · ${res.model}`;
     }
 
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);

@@ -1,11 +1,22 @@
-# HANDOFF.md — Bmail v1.2.6 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
+# HANDOFF.md — Bmail v1.2.7 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
 
-> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.6`)
+> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.7`)
 > **보안 정책**: 프로덕션 사용자 UI에서 `[HANDOFF]` 및 `[전체 코드 다운로드]` 버튼은 제거되었으며, `/api/export/handoff` 엔드포인트 삭제(HTTP `404`), `/api/export/source-archive*`는 `BMAIL_DEV_EXPORT === 'true'` 개발 환경 전용으로 격리되었습니다(기본 HTTP `404`).
 
 ---
 
-## 0. 2026-11-25 v1.2.6 속도 개선 · 미열람 브리핑 · 명함 서명 새창 · 우측 분석창 고정 · 네임태그 제외 · 전체 매뉴얼 실측 현황
+## 0. 2026-11-25 v1.2.7 Classic Outlook 작성·발송 100% 패리티 · API 호출량 그래프 · Claude 고급 분리 · Groq 5-키 병렬 & 1줄 터미널 등록 실측 현황
+
+| 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
+|---|---|---|
+| **Classic Outlook 리본 메일 작성·발송 100% 패리티** | ✅ 실측 완료 | `OutlookComposeWindow.tsx`(클래식 Outlook `메시지`/`삽입`/`옵션` 리본, 클립보드·글꼴·색·목록·표·링크, Outlook 주소록 `152명` 선택기+자동완성, `숨은 참조(Bcc)`, 로컬 파일 첨부+드래그앤드롭+첨부 제거 칩, `! 중요도 높음`/`↓ 낮음`, 읽음 확인 요청, 실제 `sendDelaySec` 발송 지연 취소 카운트다운, `Ctrl+Enter`/`Alt+S`), `pop3AutoConnect.ts`(`buildSmtpMimePayload` · `sendSmtpMessage`: `multipart/mixed` 첨부 + `cid:` 명함 + `Importance` + `Disposition-Notification-To` + 비노출 `Bcc` `RCPT TO`), `server.ts` (`/api/pop3/send`, `/api/local/outlook/send-via-com` + `localDb` `보낸 편지함` 저장), `App.tsx`(`bmail_local_contacts_cache` 독립 창 전달). E2E(`3471`)에서 주소록 `152명`, 첨부 칩 제거, 명함 이미지, 5초 발송 취소 카운트다운 실측 (실제 외부 SMTP/Outlook COM 메일 전송은 `[미검증]`) |
+| **API 라우팅 시각화 · 호출량 SVG 그래프 · Claude 고급 / Groq 5-키 병렬** | ✅ 실측 완료 | `server.ts` (`GET /api/admin/llm-usage` `routingPolicy` 메타 추가), `AdminLlmUsageCompactCard.tsx` (실시간 라우팅 정책 배지 + 프로바이더별 호출량 분포 바 차트 + 일자별 SVG 막대 그래프), `DashboardView.tsx` (상단 KPI 직하단 상시 배치). `groqKeyRotator.ts` (`runGroqParallelBatch` 최대 5병렬 실행 + 순서 보존, `shouldEscalateToClaude` 고급 분석 `executive-report`/`doc-analysis`/`document`/`meeting`/대량 `mail-reduce` Claude 5.5 에스컬레이션), `aiService.ts` (병렬 Map 청킹), `executiveReportEngine.ts` (경영진 보고서 Claude 1순위). 실서버 `/api/admin/llm-usage` HTTP `200` (`totalCalls: 24`, Groq 18 / Claude 4 / Gemini 2) 및 E2E 대시보드 그래프 2종 실측 |
+| **Groq 5-키 쉼표 구분 터미널 1줄 일괄 설정 CLI (`npm run groq:keys`)** | ✅ 실측 완료 | `scripts/set-groq-keys.mjs`, `package.json` (`"groq:keys"`), `groq-keys.txt`, `groqKeyRotator.test.ts` (쉼표 구분 5-키 파싱 단위 테스트). 격리 임시 디렉토리 테스트 `SET_GROQ_KEYS_SMOKE_PASS` (`groq-keys.txt` · `data/groq-keys.txt` · `.env` `GROQ_API_KEY~5` 동시 기록 및 마스킹 출력 확인) |
+| **매뉴얼 Flash 동기화 · 검증 · 배포 (`1.2.7`)** | ✅ 실측 완료 | `AGENTS.md` 4항 준수 `Model: "flash"` 서브에이전트가 `manualCatalog.ts`(`v1.2.7`, 25개 전체 아이콘) & `InteractiveManualModal.tsx` 동기화(`manualCatalog.test.ts` PASS). `npm run lint` (오류 `0`건), `node --check desktop/main.cjs desktop/preload.cjs scripts/set-groq-keys.mjs` (`0`), Node 24 전체 35개 파일 **`147/147 PASS`** (`0` fail, `0` skipped), `release-exe/Bmail-Outlook-AI-Setup-1.2.7.exe` (`121,448,876` bytes, `sha256: 4e8fd3e7ba728132a743cc8b5891d0bf28c4f4543d76f78be127474a5725260f`), Worker Version `0aa775c8-75d2-4db9-a76e-a355e7d5a8a3`, 무음 재설치 `NSIS_EXIT_CODE=0` (`installed 1.2.7`), `ego-browser` 3종 E2E(`EGO_EXIT=0`) & 3장 스크린샷 육안 검수 완료 |
+
+---
+
+## 0-0. 2026-11-25 v1.2.6 속도 개선 · 미열람 브리핑 · 명함 서명 새창 · 우측 분석창 고정 · 네임태그 제외 · 전체 매뉴얼 실측 현황
 
 | 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
 |---|---|---|
