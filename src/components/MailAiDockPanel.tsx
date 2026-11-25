@@ -373,7 +373,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
     return (
       <aside
         aria-label="세로 1분할 AI 분석 및 답안 도크"
-        className="w-[272px] xl:w-[296px] bg-[#FAF9F8] border-l border-[#E0E0E0] p-4 flex flex-col justify-center items-center text-center text-xs text-slate-500 shrink-0"
+        className="w-full min-w-0 bg-[#FAF9F8] p-4 flex flex-col justify-center items-center text-center text-xs text-slate-500 shrink-0"
       >
         <Sparkles className="w-6 h-6 text-[#0F6CBD] mb-2 opacity-60" />
         <p className="font-semibold text-slate-700">AI 분석 · 답안 도크</p>
@@ -387,7 +387,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
   return (
     <aside
       aria-label="세로 1분할 AI 분석 및 답안 도크"
-      className="w-[272px] xl:w-[296px] bg-[#FAF9F8] border-l border-[#E0E0E0] flex flex-col min-h-0 shrink-0 select-none"
+      className="w-full min-w-0 bg-[#FAF9F8] flex flex-col min-h-0 shrink-0 select-none"
     >
       {/* Top Header */}
       <div className="px-3 py-2 bg-white border-b border-[#E0E0E0] flex items-center justify-between gap-1.5 shrink-0">

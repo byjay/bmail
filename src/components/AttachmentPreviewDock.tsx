@@ -353,7 +353,7 @@ export const AttachmentPreviewDock: React.FC<AttachmentPreviewDockProps> = ({
   return (
     <aside
       aria-label="세로 2분할 첨부 미리보기 및 폴더 일괄 저장 도크"
-      className="w-[288px] xl:w-[316px] bg-white border-l border-[#E0E0E0] flex flex-col min-h-0 shrink-0 select-none"
+      className="w-full min-w-0 bg-white flex flex-col min-h-0 shrink-0 select-none"
     >
       {/* Top Mode Switcher: 첨부 미리보기·분석 vs 폴더 저장·리포트 */}
       <div className="px-2.5 py-2 bg-[#FAF9F8] border-b border-[#E0E0E0] flex items-center justify-between gap-1.5 shrink-0">

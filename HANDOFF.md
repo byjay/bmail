@@ -1,11 +1,21 @@
-# HANDOFF.md — Bmail v1.2.9 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
+# HANDOFF.md — Bmail v1.2.10 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
 
-> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.9`)
+> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.10`)
 > **보안 정책**: 프로덕션 사용자 UI에서 `[HANDOFF]` 및 `[전체 코드 다운로드]` 버튼은 제거되었으며, `/api/export/handoff` 엔드포인트 삭제(HTTP `404`), `/api/export/source-archive*`는 `BMAIL_DEV_EXPORT === 'true'` 개발 환경 전용으로 격리되었습니다(기본 HTTP `404`).
 
 ---
 
-## 0. 2026-11-25 v1.2.9 오리지널 클래식 Outlook 평면 UI · 최근 14일 브리핑 우측하단 팝업 · 속도 고속화 · 관리자 사용량 기준(v1.2.8 포함) 실측 현황
+## 0. 2026-11-25 v1.2.10 가로 구역 드래그 크기 조절 · 최근 14일 미확인 자동 알림 팝업 실측 현황
+
+| 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
+|---|---|---|
+| **Outlook 4개 구역 가로 드래그 크기 조절** | ✅ 실측 완료 | `MailAiDockPanel.tsx` & `AttachmentPreviewDock.tsx` (`w-full min-w-0` 유동 폭 전환), `OutlookWorkbench.tsx` (`DEFAULT_PANE_WIDTHS`, `PANE_WIDTH_LIMITS`, `bmail_pane_widths_v1` `localStorage` 자동 저장, iframe 드래그 끊김 방지 투명 오버레이, 4종 `role="separator"` 스플리터 `splitter-folder`/`splitter-list`/`splitter-ai-dock`/`splitter-attach-dock` + 더블클릭 기본 너비 복원). 설치본(`3474`) E2E 실제 마우스 드래그 실측: `folder 224→294px` · `list 360→470px` · `reading 508→258px` · `aiDock 299→369px`, 새로고침 후 동일 유지(`294`/`470`/`258`/`369`), 더블클릭 후 `list=360px` 원복 |
+| **최근 14일 미확인 수신 메일 자동 알림 팝업** | ✅ 실측 완료 | `UnreadBriefingBanner.tsx` (최근 14일 미확인 메일 수신 시 우측 하단 `fixed bottom-[98px] right-3 z-50` 자동 알림 팝업 `recent-unread-alert-popup` 발생, `[30분 뒤]` 다시 알림 `localStorage`+60s 타이머, `[×]` 닫기 시 동일 시그니처 억제 후 새 미확인 수신 시 자동 재알림, 2023 장기 과거 메일 제외 유지). E2E에서 초기 자동 팝업(`toastVisible: true`, `noOverlapWithPill: true`, `has14DayText: true`, `has2023OrOldAlert: false`) 및 `[30분 뒤]` 클릭 후 닫힘(`toastVisibleAfterSnooze: false`, `pillStillVisible: true`) 실측 |
+| **매뉴얼 Flash 동기화 · 검증 · 배포 (`1.2.10`)** | ✅ 실측 완료 | `AGENTS.md` 4항 준수 `Model: "flash"` 서브에이전트가 `manualCatalog.ts` (`1.2.10`, 31개 아이콘 `#1~#31`, 11개 모션 씬) & `InteractiveManualModal.tsx` 동기화 (`manualCatalog.test.ts` 1/1 PASS). `npm run lint` (`0`), `node --check` (`0`), Node `v24.20.0` 전체 35개 파일 **`148/148 PASS`** (`0` fail, `0` skipped). `release-exe/Bmail-Outlook-AI-Setup-1.2.10.exe` (`121,457,488` B, `sha256: 9249ab849f41b03f05247fa7d916148bfc5acc5bf49c543313d5067c82a8388a`), R2 `latest.json`, Worker Version `7da129c1-249c-4f7e-b2fa-96025b06bf3a`, 무음 업그레이드 `NSIS_EXIT_CODE=0` (`installed 1.2.10`) |
+
+---
+
+## 0-0. 2026-11-25 v1.2.9 오리지널 클래식 Outlook 평면 UI · 최근 14일 브리핑 우측하단 팝업 · 속도 고속화 · 관리자 사용량 기준(v1.2.8 포함) 실측 현황
 
 | 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
 |---|---|---|

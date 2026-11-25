@@ -149,6 +149,47 @@ const MailMiniAssistWindow = lazy(() =>
   import('./MailMiniAssistWindow').then((m) => ({ default: m.MailMiniAssistWindow }))
 );
 
+type ResizablePaneKey = 'folder' | 'list' | 'aiDock' | 'attachDock';
+
+const PANE_WIDTHS_STORAGE_KEY = 'bmail_pane_widths_v1';
+
+const DEFAULT_PANE_WIDTHS: Record<ResizablePaneKey, number> = {
+  folder: 224,
+  list: 360,
+  aiDock: 300,
+  attachDock: 316,
+};
+
+const PANE_WIDTH_LIMITS: Record<ResizablePaneKey, readonly [number, number]> = {
+  folder: [150, 460],
+  list: [220, 760],
+  aiDock: [240, 640],
+  attachDock: [240, 640],
+};
+
+function clampPaneWidth(pane: ResizablePaneKey, raw: unknown): number {
+  const [minW, maxW] = PANE_WIDTH_LIMITS[pane];
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_PANE_WIDTHS[pane];
+  return Math.max(minW, Math.min(maxW, Math.round(n)));
+}
+
+function loadSavedPaneWidths(): Record<ResizablePaneKey, number> {
+  try {
+    const raw = localStorage.getItem(PANE_WIDTHS_STORAGE_KEY);
+    if (!raw) return { ...DEFAULT_PANE_WIDTHS };
+    const parsed = JSON.parse(raw) as Partial<Record<ResizablePaneKey, unknown>>;
+    return {
+      folder: clampPaneWidth('folder', parsed?.folder),
+      list: clampPaneWidth('list', parsed?.list),
+      aiDock: clampPaneWidth('aiDock', parsed?.aiDock),
+      attachDock: clampPaneWidth('attachDock', parsed?.attachDock),
+    };
+  } catch {
+    return { ...DEFAULT_PANE_WIDTHS };
+  }
+}
+
 interface MicrosoftAuthState {
   configured: boolean;
   connected: boolean;
@@ -440,6 +481,103 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
     });
   };
   const [showUnreadBriefing, setShowUnreadBriefing] = useState(false);
+  const [paneWidths, setPaneWidths] = useState<Record<ResizablePaneKey, number>>(() =>
+    loadSavedPaneWidths()
+  );
+  const paneWidthsRef = useRef(paneWidths);
+  paneWidthsRef.current = paneWidths;
+  const [activeResizePane, setActiveResizePane] = useState<ResizablePaneKey | null>(null);
+  const activeResizeCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => {
+      activeResizeCleanupRef.current?.();
+      activeResizeCleanupRef.current = null;
+    };
+  }, []);
+
+  const persistPaneWidths = (next: Record<ResizablePaneKey, number>) => {
+    try {
+      localStorage.setItem(PANE_WIDTHS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const resetPaneWidth = (pane: ResizablePaneKey) => {
+    setPaneWidths((prev) => {
+      const next = { ...prev, [pane]: DEFAULT_PANE_WIDTHS[pane] };
+      persistPaneWidths(next);
+      return next;
+    });
+  };
+
+  const startPaneResize = (pane: ResizablePaneKey, e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    activeResizeCleanupRef.current?.();
+    const startX = e.clientX;
+    const startWidth = paneWidthsRef.current[pane];
+    const dir = pane === 'folder' || pane === 'list' ? 1 : -1;
+    setActiveResizePane(pane);
+    let latestWidths = paneWidthsRef.current;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      const dx = ev.clientX - startX;
+      const clamped = clampPaneWidth(pane, startWidth + dir * dx);
+      setPaneWidths((prev) => {
+        if (prev[pane] === clamped) return prev;
+        const next = { ...prev, [pane]: clamped };
+        latestWidths = next;
+        return next;
+      });
+    };
+
+    const cleanup = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
+      activeResizeCleanupRef.current = null;
+    };
+
+    const handleMouseUp = () => {
+      cleanup();
+      setActiveResizePane(null);
+      persistPaneWidths(latestWidths);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('blur', handleMouseUp);
+    activeResizeCleanupRef.current = cleanup;
+  };
+
+  const renderVerticalSplitter = (pane: ResizablePaneKey, testId: string, label: string) => {
+    const isActive = activeResizePane === pane;
+    return (
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={label}
+        aria-valuenow={paneWidths[pane]}
+        aria-valuemin={PANE_WIDTH_LIMITS[pane][0]}
+        aria-valuemax={PANE_WIDTH_LIMITS[pane][1]}
+        data-testid={testId}
+        title={`${label} — 좌우 드래그로 가로 폭 조절 (더블클릭 기본 너비 복원)`}
+        onMouseDown={(e) => startPaneResize(pane, e)}
+        onDoubleClick={() => resetPaneWidth(pane)}
+        className="hidden lg:flex w-[6px] -mx-[3px] z-20 cursor-col-resize shrink-0 items-center justify-center group select-none"
+      >
+        <div
+          className={`h-full transition-all ${
+            isActive
+              ? 'w-[2px] bg-[#0F6CBD]'
+              : 'w-[1px] bg-transparent group-hover:w-[2px] group-hover:bg-[#0F6CBD]'
+          }`}
+        />
+      </div>
+    );
+  };
   const [briefingFetchedEmail, setBriefingFetchedEmail] = useState<MailItem | null>(null);
   const [showAttachSplitDock, setShowAttachSplitDock] = useState(false);
   const [selectedPreviewAttachmentIdx, setSelectedPreviewAttachmentIdx] = useState<number | null>(null);
@@ -2339,12 +2477,25 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
       )}
 
       {/* Row 3: Authentic Classic Outlook Flat 1px Divider Multi-Pane Workspace */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-0 px-0 pb-0 bg-white border-t border-[#E1DFDD] min-h-0 overflow-hidden">
+      <div
+        style={
+          {
+            '--pane-folder-w': `${paneWidths.folder}px`,
+            '--pane-list-w': `${paneWidths.list}px`,
+            '--pane-aidock-w': `${paneWidths.aiDock}px`,
+            '--pane-attachdock-w': `${paneWidths.attachDock}px`,
+          } as React.CSSProperties
+        }
+        className="flex-1 flex flex-col lg:flex-row gap-0 px-0 pb-0 bg-white border-t border-[#E1DFDD] min-h-0 overflow-hidden"
+      >
+        {activeResizePane && (
+          <div className="fixed inset-0 z-[999] cursor-col-resize select-none" aria-hidden="true" />
+        )}
         {/* Pane 1: Collapsible Outlook Folder Tree (#FAF9F8 Classic Nav Rail) + Bottom Mini-Window Dock */}
         {showFolderPane && (
           <nav
             aria-label="Outlook 폴더"
-            className="w-full lg:w-[224px] shrink-0 bg-[#FAF9F8] border-r border-[#E1DFDD] rounded-none flex lg:flex-col justify-between gap-2 overflow-x-auto lg:overflow-hidden select-none"
+            className="w-full lg:w-[var(--pane-folder-w)] shrink-0 bg-[#FAF9F8] border-r border-[#E1DFDD] rounded-none flex lg:flex-col justify-between gap-2 overflow-x-auto lg:overflow-hidden select-none"
           >
             <div className="flex lg:flex-col gap-3 lg:overflow-y-auto lg:flex-1 lg:min-h-0 p-1">
             {localFolders.length > 0 && (
@@ -2769,6 +2920,8 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
             </div>
           </nav>
         )}
+        {showFolderPane &&
+          renderVerticalSplitter('folder', 'splitter-folder', '폴더 창 가로 크기 조절')}
 
         {/* Right Split Container: Optional Project Vault Bar + Message List + Reading Pane */}
         <div className="flex-1 flex flex-col gap-0 min-w-0 min-h-0 overflow-hidden bg-white">
@@ -2803,9 +2956,7 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
               ? 'flex-1 min-w-0'
               : readingPanePosition === 'bottom'
                 ? 'h-[42%] shrink-0 w-full'
-                : wideReadingPane || showAiSplitDock || showAttachSplitDock
-                  ? 'w-full lg:w-[292px] xl:w-[316px] shrink-0'
-                  : 'w-full lg:w-[348px] xl:w-[380px] shrink-0'
+                : 'w-full lg:w-[var(--pane-list-w)] shrink-0'
           }`}
         >
           {/* Outlook List Header: Underlined Filter Tabs + Select / Sort */}
@@ -3424,6 +3575,9 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
             )}
           </div>
         </section>
+        {showReadingPane &&
+          readingPanePosition !== 'bottom' &&
+          renderVerticalSplitter('list', 'splitter-list', '메일 목록 · 읽기 창 가로 크기 조절')}
 
         {/* Pane 3: Classic Flat White Outlook Reading Pane OR AI Result Viewer */}
         {showReadingPane && (
@@ -3928,41 +4082,47 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
           </section>
         )}
 
-        {/* Right Split 1: Vertical AI Analysis & Reply Dock */}
+        {/* Right Split 1: Vertical AI Analysis & Reply Dock (Horizontally Resizable) */}
         {showReadingPane && centerMode === 'mail' && showAiSplitDock && (
-          <Suspense fallback={null}>
-            <div className="rounded-lg border border-[#E0E0E0] overflow-hidden flex min-h-0 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <MailAiDockPanel
-                email={activeEmail}
-                onInsertReplyDraft={(draft) =>
-                  openComposePopup('reply', {
-                    to: draft.to,
-                    subject: draft.subject,
-                    body: draft.body,
-                  })
-                }
-                onAddCalendarEvent={onAddCalendarEvent}
-                onClose={() => togglePinAiSplitDock(false)}
-              />
-            </div>
-          </Suspense>
+          <>
+            {renderVerticalSplitter('aiDock', 'splitter-ai-dock', '읽기 창 · AI 도크 가로 크기 조절')}
+            <Suspense fallback={null}>
+              <div className="w-full lg:w-[var(--pane-aidock-w)] border-l border-[#E1DFDD] overflow-hidden flex min-h-0 shrink-0">
+                <MailAiDockPanel
+                  email={activeEmail}
+                  onInsertReplyDraft={(draft) =>
+                    openComposePopup('reply', {
+                      to: draft.to,
+                      subject: draft.subject,
+                      body: draft.body,
+                    })
+                  }
+                  onAddCalendarEvent={onAddCalendarEvent}
+                  onClose={() => togglePinAiSplitDock(false)}
+                />
+              </div>
+            </Suspense>
+          </>
         )}
 
-        {/* Right Split 2: Vertical Attachment Preview, AI Doc Analysis & Folder Batch Exporter Dock */}
+        {/* Right Split 2: Vertical Attachment Preview, AI Doc Analysis & Folder Batch Exporter Dock (Horizontally Resizable) */}
         {showReadingPane && centerMode === 'mail' && showAttachSplitDock && (
-          <Suspense fallback={null}>
-            <div className="rounded-lg border border-[#E0E0E0] overflow-hidden flex min-h-0 shrink-0 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-              <AttachmentPreviewDock
-                email={activeEmail}
-                selectedAttachmentIdx={selectedPreviewAttachmentIdx}
-                onSelectAttachmentIdx={setSelectedPreviewAttachmentIdx}
-                activeFolderFilter={String(activeFolder)}
-                activeStoreFilter={activeStoreFilter}
-                projects={projects}
-                onClose={() => setShowAttachSplitDock(false)}
-              />
-            </div>
-          </Suspense>
+          <>
+            {renderVerticalSplitter('attachDock', 'splitter-attach-dock', '첨부·폴더저장 도크 가로 크기 조절')}
+            <Suspense fallback={null}>
+              <div className="w-full lg:w-[var(--pane-attachdock-w)] border-l border-[#E1DFDD] overflow-hidden flex min-h-0 shrink-0">
+                <AttachmentPreviewDock
+                  email={activeEmail}
+                  selectedAttachmentIdx={selectedPreviewAttachmentIdx}
+                  onSelectAttachmentIdx={setSelectedPreviewAttachmentIdx}
+                  activeFolderFilter={String(activeFolder)}
+                  activeStoreFilter={activeStoreFilter}
+                  projects={projects}
+                  onClose={() => setShowAttachSplitDock(false)}
+                />
+              </div>
+            </Suspense>
+          </>
         )}
           </div>
         </div>

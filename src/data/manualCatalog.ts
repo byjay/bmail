@@ -5,13 +5,13 @@
  * updating this catalog automatically updates:
  *   1. In-app Interactive HTML Manual Modal (`InteractiveManualModal.tsx`)
  *   2. Standalone HTML Popup Window (`/?manual=1`)
- *   3. Motion-Graphic Video Walkthrough Player (10 scenes)
+ *   3. Motion-Graphic Video Walkthrough Player (11 scenes)
  *   4. Versioned Release Changelog (`MANUAL_CHANGELOG`)
  *
  * Enforced by `src/data/manualCatalog.test.ts` (verifies `MANUAL_VERSION === package.json.version`).
  */
 
-export const MANUAL_VERSION = '1.2.9';
+export const MANUAL_VERSION = '1.2.10';
 export const MANUAL_UPDATED_AT = '2026-11-25';
 
 export type ManualZoneId =
@@ -98,25 +98,25 @@ export const MANUAL_ZONES: ManualZoneInfo[] = [
   {
     id: 'folders',
     label: '즐겨찾기 · 저장소 폴더 트리',
-    description: '하위 폴더 아이콘 간소화 및 Outlook 즐겨찾기(New2026.xml)·김봉정/백업 평면 트리·미읽음 수',
+    description: '하위 폴더 아이콘 간소화 · 경계선 가로 드래그 크기 조절(bmail_pane_widths_v1) 및 Outlook 즐겨찾기·평면 트리',
     accentColor: '#0B7A75',
   },
   {
     id: 'maillist',
-    label: '평면 1px 날짜 그룹 메일 목록',
-    description: '둥근 박스·원형 아바타 기본 OFF 기반 오리지널 클래식 1px 경계선 목록·파란색 미읽음 바',
+    label: '평면 1px 메일 목록 · 경계선 크기 조절',
+    description: '4개 구역 경계선 마우스 드래그 폭 조절·더블클릭 초기화(bmail_pane_widths_v1) · 아바타 OFF 1px 목록',
     accentColor: '#2563EB',
   },
   {
     id: 'reading',
     label: '본문 읽기 창 (HTML · AI 요약 보기 토글)',
-    description: '원본 서식·인라인(cid:) 도면 렌더링 및 인라인 AI 요약 기본 숨김/토글 버튼',
+    description: '경계선 가로 드래그 폭 조절 + 원본 서식·인라인(cid:) 도면 렌더링 및 인라인 AI 요약 토글',
     accentColor: '#4F46E5',
   },
   {
     id: 'ai-dock',
     label: '우측 1분할: AI 분석 · 0ms 요약 도크',
-    description: '메일 클릭 시 0ms 즉시 요약 + 수동/자동 토글, Groq 5-키 병렬 & Claude 5.5 분리 라우팅',
+    description: '경계선 가로 드래그 폭 조절 + 메일 클릭 0ms 즉시 요약 · 수동/자동 토글 · Groq/Claude 라우팅',
     accentColor: '#7C3AED',
   },
   {
@@ -127,8 +127,8 @@ export const MANUAL_ZONES: ManualZoneInfo[] = [
   },
   {
     id: 'mini-assist',
-    label: '우측 하단: 최근 14일 미확인 브리핑 · 미니창',
-    description: '우측 하단 플로팅 알약/사이드 팝업(최근 14일 미확인 브리핑) 및 무오류 번역·요약 미니창',
+    label: '우측 하단: 14일 미확인 자동 알림 · 미니창',
+    description: '최근 14일 미확인 수신 메일 자동 알림 토스트([30분 뒤] · [×] 재알림) 및 무오류 번역 미니창',
     accentColor: '#D97706',
   },
   {
@@ -519,13 +519,13 @@ export const MANUAL_ICONS: ManualIconEntry[] = [
     id: 'icon-floating-unread-briefing-pill',
     number: 29,
     zone: 'mini-assist',
-    label: '우측 하단 최근 14일 미확인 브리핑 플로팅 알약·팝업',
+    label: '최근 14일 미확인 자동 알림 팝업 · [30분 뒤] · [×] 재알림',
     xPercent: 85.0,
     yPercent: 88.0,
-    summary: '최근 14일(maxAgeDays=14) 미확인 메일만 추린 우측 하단 플로팅 알약 및 사이드 팝업',
-    detail: '상단 배너 공간을 차지하지 않고 우측 하단 플로팅 알약으로 대기하다가 클릭 시 프로젝트별 중요도순 브리핑·반드시 긴급회신 목록을 사이드 팝업으로 펼칩니다. 14일 초과 장기 미열람 메일은 자동 제외됩니다.',
+    summary: '최근 14일 이내 미확인 수신 메일 자동 알림 토스트(우측 하단) + [30분 뒤] 타이머 & [×] 후 새 메일 자동 재알림',
+    detail: '최근 14일 이내 미확인 수신 메일이 감지되면 우측 하단에 비간섭 자동 알림 토스트 팝업이 열립니다. [30분 뒤]를 누르면 30분 다시 알림 타이머가 작동하고, [×] 닫기 후 새 미확인 메일이 도착하면 자동으로 재알림되며 기존 2023 장기 과거 메일 제외 정책을 유지합니다.',
     backendEndpoint: 'GET /api/local/mail/unread-briefing?maxAgeDays=14',
-    tip: '읽음 상태를 훼손하지 않고(읽지않음 유지) 긴급 회신 대상만 빠르게 추려냅니다.',
+    tip: '읽음 상태를 건드리지 않고(읽지않음 유지) 새 미확인 수신 건만 놓치지 않도록 알립니다.',
     addedInVersion: '1.2.9',
   },
   {
@@ -540,6 +540,19 @@ export const MANUAL_ICONS: ManualIconEntry[] = [
     backendEndpoint: 'PUT /api/admin/llm-usage/limits',
     tip: '저장 즉시 서버 라우팅 한도와 병렬 슬롯 설정에 반영되어 비용과 처리량을 유연하게 제어합니다.',
     addedInVersion: '1.2.8',
+  },
+  {
+    id: 'icon-pane-resize-splitter',
+    number: 31,
+    zone: 'maillist',
+    label: '4개 구역 경계선 가로 드래그 크기 조절 · 더블클릭 초기화',
+    xPercent: 31.0,
+    yPercent: 54.0,
+    summary: '폴더 창·메일 목록·읽기 창·AI 분석/첨부 도크 경계선 드래그 폭 조절 · 더블클릭 초기화 · 자동 저장(bmail_pane_widths_v1)',
+    detail: 'Outlook 워크스페이스 4개 구역(폴더 창·메일 목록·읽기 창·AI 분석/첨부 도크) 사이의 경계선을 마우스로 좌우 드래그해 원하는 너비로 즉시 조절할 수 있으며, 경계선을 더블클릭하면 기본 너비로 초기화되고 변경된 폭은 브라우저(bmail_pane_widths_v1)에 자동 저장됩니다.',
+    backendEndpoint: 'localStorage: bmail_pane_widths_v1',
+    tip: '읽기 창이나 메일 목록 폭을 업무 스타일에 맞게 한 번 맞춰두면 다음 실행 시에도 그대로 복원됩니다.',
+    addedInVersion: '1.2.10',
   },
 ];
 
@@ -652,17 +665,17 @@ export const MANUAL_MOTION_SCENES: ManualMotionScene[] = [
   {
     id: 'scene-08-sgw-and-mini-assist',
     step: 8,
-    title: '최근 14일 미확인 브리핑 플로팅 알약/팝업 & SGW 로그인창',
-    subtitle: '4년 전 등 장기 과거 제외(maxAgeDays=14) + 우측 하단 플로팅 알약·사이드 팝업 & 리본 토글',
+    title: '최근 14일 미확인 자동 알림 토스트([30분 뒤] · [×] 재알림) & SGW',
+    subtitle: '2023 장기 과거 제외(maxAgeDays=14) + 우측 하단 비간섭 자동 알림 토스트 & 타이머',
     narration:
-      '최근 14일(maxAgeDays=14) 이내 미확인 메일만 추려 우측 하단 플로팅 알약 및 사이드 팝업으로 중요도순 브리핑을 제공하며, 리본의 [미확인 브리핑] 토글과 SGW 공식 로그인 창 메신저 연동을 함께 지원합니다.',
+      '최근 14일 이내 미확인 수신 메일이 감지되면 우측 하단 비간섭 토스트 팝업이 자동 표시됩니다. [30분 뒤] 다시 알림 타이머와 [×] 닫기 후 새 메일 도착 시 자동 재알림을 지원하며 기존 2023 장기 과거 메일 제외 정책을 유지합니다.',
     durationSec: 6,
     targetIconId: 'icon-floating-unread-briefing-pill',
     zone: 'mini-assist',
     cursor: { x: 85.0, y: 88.0 },
     spotlight: { x: 76.0, y: 65.0, w: 22.5, h: 31.0 },
     previewState: 'sgw-login-chat',
-    badgeText: 'STEP 8 · 14일 미확인 브리핑 & 미니창',
+    badgeText: 'STEP 8 · 14일 미확인 자동 알림',
   },
   {
     id: 'scene-09-classic-3pane-and-ai-toggles',
@@ -694,9 +707,34 @@ export const MANUAL_MOTION_SCENES: ManualMotionScene[] = [
     previewState: 'outlook-overview',
     badgeText: 'STEP 10 · DB 인덱스 고속화 & 0ms 요약',
   },
+  {
+    id: 'scene-11-pane-resize-and-auto-toast',
+    step: 11,
+    title: '4개 구역 경계선 가로 드래그 크기 조절 · 더블클릭 초기화',
+    subtitle: '폴더·메일목록·읽기창·AI/첨부 도크 폭 자유 조절 & 브라우저 자동 저장(bmail_pane_widths_v1)',
+    narration:
+      '폴더 창·메일 목록·읽기 창·AI 분석/첨부 도크 사이의 경계선을 마우스로 좌우 드래그해 원하는 크기로 즉시 조절하고, 더블클릭 시 기본 너비로 초기화되며 변경 폭은 bmail_pane_widths_v1에 자동 저장됩니다.',
+    durationSec: 6,
+    targetIconId: 'icon-pane-resize-splitter',
+    zone: 'maillist',
+    cursor: { x: 31.0, y: 54.0 },
+    spotlight: { x: 14.5, y: 15.0, w: 50.0, h: 76.0 },
+    previewState: 'outlook-overview',
+    badgeText: 'STEP 11 · 경계선 드래그 폭 조절',
+  },
 ];
 
 export const MANUAL_CHANGELOG: ManualChangelogEntry[] = [
+  {
+    version: '1.2.10',
+    date: '2026-11-25',
+    headline:
+      '4개 구역 경계선 마우스 가로 드래그 크기 조절(bmail_pane_widths_v1) + 최근 14일 미확인 수신 메일 자동 알림 토스트([30분 뒤] · [×] 재알림)',
+    highlights: [
+      'Outlook 워크스페이스 4개 구역(폴더 창·메일 목록·읽기 창·AI 분석/첨부 도크) 경계선 마우스 가로 드래그 크기 조절 · 더블클릭 기본 너비 초기화 · 브라우저 자동 저장(bmail_pane_widths_v1)',
+      '최근 14일 이내 미확인 수신 메일 자동 알림 팝업 발생(우측 하단 비간섭 토스트, [30분 뒤] 다시 알림 타이머, [×] 닫기 후 새 미확인 수신 시 자동 재알림, 기존 2023 장기 과거 메일 제외 유지)',
+    ],
+  },
   {
     version: '1.2.9',
     date: '2026-11-25',

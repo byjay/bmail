@@ -540,7 +540,7 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                 ) : (
                   <div className="flex-1 flex min-h-0 overflow-hidden">
                     {/* Col 1: Classic Outlook Favorites & Store Tree (15%) */}
-                    <div className="w-[15%] bg-[#F0F0F0] border-r border-[#E0E0E0] p-2 text-[10px] flex flex-col justify-between shrink-0">
+                    <div className="w-[15%] bg-[#F0F0F0] p-2 text-[10px] flex flex-col justify-between shrink-0 relative">
                       <div className="space-y-2">
                         <div>
                           <div className="font-bold text-slate-700 mb-1">⌄ 즐겨찾기</div>
@@ -602,8 +602,16 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Pane Splitter 1->2 */}
+                    <div
+                      title="경계선 드래그 가로 크기 조절 · 더블클릭 기본 너비 초기화 (bmail_pane_widths_v1)"
+                      className="w-1 bg-[#E0E0E0] hover:bg-[#0F6CBD] cursor-col-resize shrink-0 flex items-center justify-center"
+                    >
+                      <span className="w-0.5 h-6 bg-slate-400/70 rounded-full" />
+                    </div>
+
                     {/* Col 2: Classic Flat 1px Today/Last Week Mail List (16%, no avatars) */}
-                    <div className="w-[16%] bg-white border-r border-[#E0E0E0] flex flex-col text-[10px] shrink-0">
+                    <div className="w-[16%] bg-white flex flex-col text-[10px] shrink-0">
                       <div className="px-2 py-1 bg-[#FAF9F8] border-b border-[#E0E0E0] font-bold text-slate-700 flex justify-between">
                         <span>모든 항목 · 읽지 않음</span>
                         <span>날짜 ↓</span>
@@ -642,8 +650,16 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Pane Splitter 2->3 */}
+                    <div
+                      title="경계선 드래그 가로 크기 조절 · 더블클릭 기본 너비 초기화 (bmail_pane_widths_v1)"
+                      className="w-1 bg-[#E0E0E0] hover:bg-[#0F6CBD] cursor-col-resize shrink-0 flex items-center justify-center"
+                    >
+                      <span className="w-0.5 h-6 bg-[#0F6CBD]/70 rounded-full" />
+                    </div>
+
                     {/* Col 3: Reading Pane with Rich HTML + AI 요약 보기 Toggle (33%) */}
-                    <div className="w-[33%] bg-white border-r border-[#E0E0E0] p-3 flex flex-col justify-between text-[10px] overflow-hidden">
+                    <div className="w-[33%] bg-white p-3 flex flex-col justify-between text-[10px] overflow-hidden">
                       <div className="space-y-2">
                         <div className="flex items-start justify-between gap-2">
                           <div className="text-xs font-bold text-slate-900">
@@ -697,6 +713,14 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                       <div className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded">
                         ✓ 원본 HTML 표·하이라이트·cid 인라인 이미지 복원 완료 (서명 로고 6개 자동 분리)
                       </div>
+                    </div>
+
+                    {/* Pane Splitter 3->4 */}
+                    <div
+                      title="경계선 드래그 가로 크기 조절 · 더블클릭 기본 너비 초기화 (bmail_pane_widths_v1)"
+                      className="w-1 bg-[#E0E0E0] hover:bg-[#0F6CBD] cursor-col-resize shrink-0 flex items-center justify-center"
+                    >
+                      <span className="w-0.5 h-6 bg-slate-400/70 rounded-full" />
                     </div>
 
                     {/* Col 4 (Split 1): AI Analysis & Reply Dock (18%) */}
@@ -809,16 +833,19 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                         )}
                       </div>
 
-                      {/* Bottom-Right Pinned 14-Day Unread Briefing Pill & Mini Assist Replica */}
-                      <div className="p-1.5 rounded-lg bg-[#0F6CBD] text-white shadow-md border border-white/20">
+                      {/* Bottom-Right Non-Intrusive 14-Day Unread Auto-Alert Toast & Mini Assist Replica */}
+                      <div className="p-1.5 rounded-lg bg-[#0F6CBD] text-white shadow-md border border-white/20 space-y-1">
                         <div className="flex items-center justify-between text-[9px] font-bold">
-                          <span>최근 14일 미확인 브리핑 · 미니창</span>
-                          <span>14일 기준</span>
+                          <span>최근 14일 미확인 자동 알림</span>
+                          <div className="flex items-center gap-1">
+                            <span className="px-1 py-0.2 rounded bg-white/20 text-[8px]">30분 뒤</span>
+                            <span className="px-1 py-0.2 rounded bg-white/20 text-[8px]">×</span>
+                          </div>
                         </div>
                         <div className="text-[8px] text-sky-100 truncate">
                           {previewState === 'sgw-login-chat'
-                            ? '최근 14일 미확인 사이드 팝업 + SGW 로그인 창 연동됨'
-                            : '4년 전 등 장기 과거 제외 · 우측 하단 플로팅 알약/팝업'}
+                            ? '새 미확인 수신 시 자동 재알림 · SGW 로그인 창 연동'
+                            : '2023 과거 제외 · 닫기 후 새 메일 시 자동 재알림'}
                         </div>
                       </div>
                     </div>

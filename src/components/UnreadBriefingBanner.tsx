@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Bell,
+  Clock,
   CornerUpLeft,
   Eye,
   FolderKanban,
@@ -13,8 +15,13 @@ import type { ProjectMailOverrides } from '../utils/outlookWorkspaceModel';
 import {
   DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS,
   buildUnreadPriorityBriefing,
+  type UnreadBriefingItem,
   type UnreadPriorityBriefing,
 } from '../services/unreadBriefingEngine';
+
+const ALERT_DISMISSED_SIG_KEY = 'bmail_unread_alert_dismissed_sig';
+const ALERT_SNOOZE_UNTIL_KEY = 'bmail_unread_alert_snooze_until';
+const ALERT_SNOOZE_MS = 30 * 60 * 1000;
 
 export interface UnreadBriefingBannerProps {
   emails: MailItem[];
@@ -41,6 +48,7 @@ export const UnreadBriefingBanner: React.FC<UnreadBriefingBannerProps> = ({
 }) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>('ALL');
+  const [alertVersion, setAlertVersion] = useState(0);
 
   const isOpen = open !== undefined ? open : internalOpen;
   const setOpen = (next: boolean) => {
@@ -73,29 +81,133 @@ export const UnreadBriefingBanner: React.FC<UnreadBriefingBannerProps> = ({
   const closedSummary = useMemo(() => {
     if (isOpen) return null;
     if (serverBriefing) {
+      const merged: UnreadBriefingItem[] = [];
+      const seen = new Set<string>();
+      for (const item of serverBriefing.urgentReplyAlerts || []) {
+        if (item && !seen.has(item.emailId)) {
+          seen.add(item.emailId);
+          merged.push(item);
+        }
+      }
+      for (const grp of serverBriefing.projectGroups || []) {
+        for (const item of grp.items || []) {
+          if (item && !seen.has(item.emailId)) {
+            seen.add(item.emailId);
+            merged.push(item);
+          }
+        }
+      }
+      merged.sort((a, b) => Date.parse(b.timestamp || b.date || '') - Date.parse(a.timestamp || a.date || ''));
+      const topItems = merged.slice(0, 3);
       return {
         totalUnread: serverBriefing.totalUnread,
         urgentReplyCount: serverBriefing.urgentReplyCount,
         maxAgeDays: serverBriefing.maxAgeDays ?? DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS,
+        topItems,
+        signature:
+          serverBriefing.totalUnread > 0 && topItems.length > 0
+            ? `${serverBriefing.totalUnread}:${topItems.map((i) => i.emailId).join(',')}`
+            : '',
       };
     }
+
     const cutoffMs = Date.now() - DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS * 86_400_000;
-    let totalUnread = 0;
+    const recentList: Array<{ mail: MailItem; ms: number }> = [];
     for (const m of emails) {
       if (!m || m.folder !== 'inbox' || m.isRead) {
         continue;
       }
       const ms = Date.parse(String(m.timestamp || m.date || '').trim());
       if (Number.isFinite(ms) && ms >= cutoffMs) {
-        totalUnread += 1;
+        recentList.push({ mail: m, ms });
       }
     }
+    recentList.sort((a, b) => b.ms - a.ms);
+    const topItems: UnreadBriefingItem[] = recentList.slice(0, 3).map(({ mail }) => ({
+      emailId: mail.id,
+      subject: mail.subject || '(제목 없음)',
+      fromName: mail.fromName || mail.fromEmail || '발신자 미상',
+      fromEmail: mail.fromEmail || '',
+      date: mail.date || '',
+      timeLabel: mail.timeLabel || '',
+      timestamp: mail.timestamp || '',
+      projectCode: 'GENERAL',
+      projectName: '최근 미확인 메일',
+      urgencyTier: 'normal',
+      urgencyLabel: '일반',
+      priorityScore: 50,
+      mustReply: false,
+      reasons: [],
+      drawings: [],
+      deadlines: [],
+      summary: mail.snippet || '(본문 요약 없음)',
+    }));
     return {
-      totalUnread,
+      totalUnread: recentList.length,
       urgentReplyCount: 0,
       maxAgeDays: DEFAULT_UNREAD_BRIEFING_MAX_AGE_DAYS,
+      topItems,
+      signature:
+        recentList.length > 0 && topItems.length > 0
+          ? `${recentList.length}:${topItems.map((i) => i.emailId).join(',')}`
+          : '',
     };
   }, [isOpen, emails, serverBriefing]);
+
+  const alertSignature = closedSummary?.signature || '';
+
+  useEffect(() => {
+    if (!alertSignature) return;
+    const timer = window.setInterval(() => {
+      setAlertVersion((v) => v + 1);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [alertSignature]);
+
+  const showProactiveToast = useMemo(() => {
+    if (
+      isOpen ||
+      !closedSummary ||
+      closedSummary.totalUnread === 0 ||
+      !closedSummary.signature ||
+      closedSummary.topItems.length === 0
+    ) {
+      return false;
+    }
+    try {
+      const dismissedSig = localStorage.getItem(ALERT_DISMISSED_SIG_KEY) || '';
+      if (dismissedSig === closedSummary.signature) {
+        return false;
+      }
+      const snoozeUntil = Number(localStorage.getItem(ALERT_SNOOZE_UNTIL_KEY) || '0');
+      if (Number.isFinite(snoozeUntil) && snoozeUntil > Date.now()) {
+        return false;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return true;
+  }, [isOpen, closedSummary, alertVersion]);
+
+  const handleDismissToast = () => {
+    try {
+      if (alertSignature) {
+        localStorage.setItem(ALERT_DISMISSED_SIG_KEY, alertSignature);
+      }
+    } catch {
+      // ignore storage errors
+    }
+    setAlertVersion((v) => v + 1);
+  };
+
+  const handleSnoozeToast = () => {
+    try {
+      localStorage.setItem(ALERT_SNOOZE_UNTIL_KEY, String(Date.now() + ALERT_SNOOZE_MS));
+    } catch {
+      // ignore storage errors
+    }
+    setAlertVersion((v) => v + 1);
+  };
 
   const briefing = useMemo(() => {
     if (!isOpen) return null;
@@ -110,24 +222,129 @@ export const UnreadBriefingBanner: React.FC<UnreadBriefingBannerProps> = ({
     if (!closedSummary || closedSummary.totalUnread === 0) {
       return null;
     }
+    const isUrgentAlert = closedSummary.urgentReplyCount > 0;
     return (
-      <button
-        type="button"
-        data-testid="briefing-floating-pill"
-        onClick={() => setOpen(true)}
-        title="최근 14일 미확인 메일 브리핑 팝업 열기"
-        className="fixed bottom-14 right-3 z-40 inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white hover:bg-[#F3F8FE] border border-[#C7E0F4] text-[#242424] text-xs font-semibold shadow-lg transition-all"
-      >
-        <Sparkles className="w-3.5 h-3.5 text-[#0F6CBD] shrink-0" />
-        <span className="tabular-nums">
-          미확인 브리핑 (최근 {closedSummary.maxAgeDays}일) · {closedSummary.totalUnread}건
-        </span>
-        {closedSummary.urgentReplyCount > 0 && (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10.5px] font-bold tabular-nums">
-            긴급 {closedSummary.urgentReplyCount}
-          </span>
+      <>
+        {showProactiveToast && (
+          <aside
+            role="status"
+            aria-label="최근 미확인 메일 자동 알림 팝업"
+            data-testid="recent-unread-alert-popup"
+            className="fixed bottom-[98px] right-3 z-50 w-[min(420px,92vw)] rounded-xl border border-[#0F6CBD]/35 bg-white shadow-2xl overflow-hidden"
+          >
+            <div
+              className={`px-3.5 py-2 text-white flex items-center justify-between gap-2 ${
+                isUrgentAlert ? 'bg-rose-600' : 'bg-[#0F6CBD]'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 min-w-0 text-xs font-bold">
+                <Bell className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">
+                  미확인 최근 메일 알림 · {closedSummary.totalUnread}건
+                  {isUrgentAlert ? ` (긴급회신 ${closedSummary.urgentReplyCount}건)` : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  data-testid="unread-alert-snooze"
+                  onClick={handleSnoozeToast}
+                  title="30분 뒤에도 미확인 상태면 다시 알립니다"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 text-[10.5px] font-semibold transition-colors"
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>30분 뒤</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="unread-alert-dismiss"
+                  onClick={handleDismissToast}
+                  aria-label="최근 미확인 알림 닫기"
+                  title="현재 목록 알림 닫기 (새 미확인 메일 수신 시 자동 재알림)"
+                  className="p-0.5 rounded hover:bg-white/25 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            <ul className="divide-y divide-[#EDEBE9] max-h-[210px] overflow-y-auto bg-white">
+              {closedSummary.topItems.map((item) => (
+                <li
+                  key={item.emailId}
+                  className="px-3 py-2 flex items-start justify-between gap-2 hover:bg-[#FAF9F8] text-xs"
+                >
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span
+                        className={`px-1.5 py-0.2 rounded text-[9.5px] font-bold shrink-0 ${
+                          item.urgencyTier === 'urgent-reply'
+                            ? 'bg-rose-600 text-white'
+                            : item.urgencyTier === 'important'
+                              ? 'bg-amber-500 text-white'
+                              : 'bg-[#EBF3FC] text-[#0F6CBD]'
+                        }`}
+                      >
+                        {item.urgencyLabel}
+                      </span>
+                      <span className="font-semibold text-[#242424] truncate">
+                        {item.fromName} — {item.subject}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[#616161] truncate">{item.summary}</div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => onQuickReplyMail(item.emailId)}
+                      title="원문 읽음 유지하고 바로 회신"
+                      className="px-1.5 py-0.5 rounded border border-[#D1D1D1] bg-white hover:bg-[#EBF3FC] text-[10.5px] font-semibold text-[#0F6CBD]"
+                    >
+                      회신
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenMail(item.emailId)}
+                      className="px-1.5 py-0.5 rounded border border-[#D1D1D1] bg-white hover:bg-[#F3F2F1] text-[10.5px] font-medium text-[#242424]"
+                    >
+                      열기
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+
+            <div className="px-3 py-1.5 bg-[#FAF9F8] border-t border-[#E1DFDD] flex items-center justify-between gap-2 text-[11px]">
+              <span className="text-[#616161]">최근 {closedSummary.maxAgeDays}일 미확인 메일입니다</span>
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="font-semibold text-[#0F6CBD] hover:underline"
+              >
+                전체 브리핑 열기
+              </button>
+            </div>
+          </aside>
         )}
-      </button>
+
+        <button
+          type="button"
+          data-testid="briefing-floating-pill"
+          onClick={() => setOpen(true)}
+          title="최근 14일 미확인 메일 브리핑 팝업 열기"
+          className="fixed bottom-14 right-3 z-40 inline-flex items-center gap-2 px-3 py-2 rounded-full bg-white hover:bg-[#F3F8FE] border border-[#C7E0F4] text-[#242424] text-xs font-semibold shadow-lg transition-all"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-[#0F6CBD] shrink-0" />
+          <span className="tabular-nums">
+            미확인 브리핑 (최근 {closedSummary.maxAgeDays}일) · {closedSummary.totalUnread}건
+          </span>
+          {closedSummary.urgentReplyCount > 0 && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10.5px] font-bold tabular-nums">
+              긴급 {closedSummary.urgentReplyCount}
+            </span>
+          )}
+        </button>
+      </>
     );
   }
 

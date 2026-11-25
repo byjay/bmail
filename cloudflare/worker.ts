@@ -548,7 +548,7 @@ export default {
         {
           ok: true,
           service: 'bmail-outlook-ai-gateway',
-          version: '1.2.9',
+          version: '1.2.10',
           hasReleasesBucket: Boolean(env.BMAIL_RELEASES),
         },
         200,
