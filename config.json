@@ -1,0 +1,37 @@
+{
+  "plugin": {
+    "displayName": "MailLog Studio AI",
+    "ribbonGroupLabel": "MailLog AI",
+    "ribbonButtonLabel": "메일 분석·일지",
+    "supportsPinning": true,
+    "supportsSharedFolders": true,
+    "trustedCatalogPath": "\\\\fileserver\\outlook-addins\\maillog"
+  },
+  "ai": {
+    "defaultProvider": "builtin",
+    "fallbackToBuiltIn": true,
+    "maxEmailsPerRun": 40,
+    "models": {
+      "groq": "openai/gpt-oss-120b",
+      "claude": "claude-haiku-5-5",
+      "openai": "gpt-4o-mini",
+      "builtin": "gemini-4-hydrogen"
+    }
+  },
+  "agent": {
+    "enabled": true,
+    "autoRunOnImport": false,
+    "autoSaveArchive": true,
+    "autoMaskSensitiveInfo": true,
+    "includeActionItems": true,
+    "defaultScope": "all",
+    "defaultDateMode": "single",
+    "defaultBlogTone": "insight",
+    "customSystemDirective": ""
+  },
+  "pst": {
+    "maxExtractedMessages": 500,
+    "maxUploadSizeMb": 150,
+    "autoDeleteTempFiles": true
+  }
+}

@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+:root {
+  /* Microsoft Fluent 2 Design System Tokens (New Outlook Light Theme) */
+  --fluent-font-sans: "Segoe UI Variable", "Segoe UI", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  --fluent-font-mono: "Cascadia Mono", "Consolas", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Neutral Canvas & Surfaces */
+  --fluent-bg-canvas: #F5F5F5;
+  --fluent-bg-surface: #FFFFFF;
+  --fluent-bg-subtle: #FAF9F8;
+  --fluent-bg-rail: #F0F0F0;
+  --fluent-bg-hover: rgba(0, 0, 0, 0.04);
+  --fluent-bg-pressed: rgba(0, 0, 0, 0.08);
+  --fluent-bg-selected: #EBF3FC;
+
+  /* Neutral Foregrounds */
+  --fluent-fg-1: #242424;
+  --fluent-fg-2: #424242;
+  --fluent-fg-3: #616161;
+  --fluent-fg-4: #707070;
+  --fluent-fg-disabled: #BDBDBD;
+
+  /* Neutral Strokes */
+  --fluent-stroke-1: #D1D1D1;
+  --fluent-stroke-2: #E0E0E0;
+  --fluent-stroke-subtle: #EDEBE9;
+  --fluent-stroke-accessible: #616161;
+
+  /* Fluent 2 Brand Ramp (Microsoft Outlook Communication Blue) */
+  --fluent-brand: #0F6CBD;
+  --fluent-brand-hover: #115EA3;
+  --fluent-brand-pressed: #0E4775;
+  --fluent-brand-tint: #EBF3FC;
+  --fluent-brand-tint-hover: #CFE4FA;
+  --fluent-brand-border: #B4D6FA;
+
+  /* Fluent 2 Semantic Status Tokens */
+  --fluent-urgent: #C50F1F;
+  --fluent-urgent-bg: #FDF3F4;
+  --fluent-urgent-border: #EEACB2;
+  --fluent-important: #0F6CBD;
+  --fluent-important-bg: #EBF3FC;
+  --fluent-important-border: #B4D6FA;
+  --fluent-normal: #616161;
+  --fluent-normal-bg: #F5F5F5;
+  --fluent-normal-border: #E0E0E0;
+
+  --fluent-success: #107C41;
+  --fluent-success-bg: #F1FAF1;
+  --fluent-success-border: #9FD89F;
+  --fluent-warning: #B45309;
+  --fluent-warning-bg: #FFF9E6;
+  --fluent-warning-border: #F6D88C;
+  --fluent-teal: #0B7A75;
+  --fluent-teal-bg: #EFF8F7;
+
+  /* Fluent 2 Corner Radii & Shadows */
+  --fluent-radius-sm: 4px;
+  --fluent-radius-md: 6px;
+  --fluent-radius-lg: 8px;
+  --fluent-shadow-2: 0 1px 2px rgba(0, 0, 0, 0.06), 0 0 2px rgba(0, 0, 0, 0.04);
+  --fluent-shadow-4: 0 2px 4px rgba(0, 0, 0, 0.08), 0 0 2px rgba(0, 0, 0, 0.05);
+  --fluent-shadow-8: 0 4px 8px rgba(0, 0, 0, 0.12), 0 0 2px rgba(0, 0, 0, 0.08);
+  --fluent-shadow-16: 0 8px 16px rgba(0, 0, 0, 0.14), 0 0 2px rgba(0, 0, 0, 0.12);
+}
+
+@layer base {
+  html,
+  body {
+    font-family: var(--fluent-font-sans);
+    color: var(--fluent-fg-1);
+    background-color: var(--fluent-bg-canvas);
+    line-height: 1.45;
+    letter-spacing: -0.005em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv02", "cv03", "cv04";
+  }
+
+  code,
+  pre,
+  kbd,
+  .font-mono {
+    font-family: var(--fluent-font-mono);
+  }
+
+  button,
+  [role="button"],
+  a,
+  select,
+  input,
+  textarea {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.fluent-card {
+  background-color: var(--fluent-bg-surface);
+  border: 1px solid var(--fluent-stroke-2);
+  border-radius: var(--fluent-radius-lg);
+  box-shadow: var(--fluent-shadow-2);
+}
+
+.fluent-tag-urgent {
+  color: var(--fluent-urgent);
+  background-color: var(--fluent-urgent-bg);
+  border: 1px solid var(--fluent-urgent-border);
+}
+
+.fluent-tag-important {
+  color: var(--fluent-important);
+  background-color: var(--fluent-important-bg);
+  border: 1px solid var(--fluent-important-border);
+}
+
+.fluent-tag-normal {
+  color: var(--fluent-normal);
+  background-color: var(--fluent-normal-bg);
+  border: 1px solid var(--fluent-normal-border);
+}
+
+/* Fluent 2 subtle neutral scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(97, 97, 97, 0.24);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(97, 97, 97, 0.42);
+}
+
+/* Respect OS reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

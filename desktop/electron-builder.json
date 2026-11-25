@@ -1,0 +1,63 @@
+{
+  "appId": "com.bmail.outlook.studio",
+  "productName": "Bmail Outlook AI",
+  "asar": false,
+  "compression": "maximum",
+  "electronLanguages": ["ko", "en-US"],
+  "directories": {
+    "output": "release-exe"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-server/**/*",
+    "config.json",
+    "desktop/main.cjs",
+    "desktop/preload.cjs",
+    "desktop/icon.ico",
+    "desktop/icon.png",
+    "node_modules/**/*",
+    "!node_modules/**/*.map",
+    "!node_modules/**/*.d.ts",
+    "!node_modules/**/*.md",
+    "!node_modules/**/test/**",
+    "!node_modules/**/tests/**",
+    "!node_modules/**/__tests__/**",
+    "!node_modules/pdfjs-dist/web/**",
+    "!node_modules/pdfjs-dist/types/**",
+    "!node_modules/exceljs/dist/exceljs.min.js",
+    "!node_modules/exceljs/dist/exceljs.bare.min.js",
+    "!node_modules/exceljs/dist/exceljs.js",
+    "!data/**/*",
+    "!.env*"
+  ],
+  "protocols": [
+    {
+      "name": "Bmail Mail",
+      "schemes": ["mailto", "bmail", "sgw-outlook"]
+    }
+  ],
+  "win": {
+    "icon": "desktop/icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "Bmail-Outlook-AI-Setup-${version}.exe"
+  },
+  "nsis": {
+    "oneClick": true,
+    "perMachine": false,
+    "deleteAppDataOnUninstall": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Bmail Outlook AI",
+    "installerIcon": "desktop/icon.ico",
+    "uninstallerIcon": "desktop/icon.ico",
+    "installerHeaderIcon": "desktop/icon.ico",
+    "include": "desktop/installer.nsh",
+    "runAfterFinish": true,
+    "uninstallDisplayName": "Bmail Outlook AI"
+  }
+}

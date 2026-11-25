@@ -1,0 +1,8 @@
+{
+  "name": "MailLog Studio for Outlook",
+  "description": "Outlook Add-in that analyzes received, sent, and selected emails by date or range using Groq, Claude, ChatGPT, or built-in AI to automatically generate daily work logs and blog drafts.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

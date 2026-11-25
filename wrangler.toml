@@ -1,0 +1,39 @@
+# ==============================================================================
+# Bmail — Cloudflare Workers + Static Assets 중앙 AI 게이트웨이 배포 설정
+# ==============================================================================
+# 배포 명령:
+#   npm run lint && npm run build && npx wrangler deploy
+# ==============================================================================
+
+name = "bmail-outlook-ai-gateway"
+main = "cloudflare/worker.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+routes = [
+  { pattern = "mail.seastar.work", custom_domain = true },
+  { pattern = "bmail.seastar.work", custom_domain = true }
+]
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/", "/download", "/intro", "/api/*", "/manifest.xml", "/manifest.json", "/commands.html", "/assets/icon-*", "/releases/*", "/install.ps1", "/install.bat"]
+
+[[kv_namespaces]]
+binding = "BMAIL_KV"
+id = "8147ffcafc3a49bca77f2681b31a9e7d"
+
+[[r2_buckets]]
+binding = "BMAIL_RELEASES"
+bucket_name = "bmail-releases"
+
+[vars]
+APP_URL = "https://mail.seastar.work"
+ALLOWED_ORIGINS = "https://bmail.seastar.work,https://mail.seastar.work,https://sgw.seastar.work,http://localhost:3000,http://127.0.0.1:3000"
+GEMINI_MODEL = "gemini-4-hydrogen"
+AGENT_BUILDER_LOCATION = "global"
+AGENT_BUILDER_SERVING_CONFIG = "default_search"
+AGENT_BUILDER_CREDIT_EXPIRY_DATE = "2027-02-02"
+AGENT_BUILDER_HARD_STOP_AFTER_EXPIRY = "true"

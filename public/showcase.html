@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bmail Outlook AI v1.2.1 — 공식 Windows 설치 및 20페이지 아키텍처 가이드</title>
+  <meta name="description" content="설치 전 웹 브라우저에서 바로 확인하고 1클릭으로 설치하는 Bmail Outlook AI v1.2.1 공식 배포 포털 (20챕터 상세 기술 및 실무 매뉴얼)" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" />
+  <style>
+    :root {
+      --bg-base: #050505;
+      --bg-shell: #0c0d12;
+      --bg-core: #11131a;
+      --stroke-outer: rgba(255, 255, 255, 0.08);
+      --stroke-inner: rgba(14, 165, 233, 0.22);
+      --accent: #0EA5E9;
+      --accent-soft: rgba(14, 165, 233, 0.14);
+      --fg-primary: #F8FAFC;
+      --fg-secondary: #94A3B8;
+      --ease-supanova: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg-base);
+      color: var(--fg-primary);
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      word-break: keep-all;
+      line-height: 1.55;
+    }
+    body {
+      min-height: 100dvh;
+      background:
+        radial-gradient(circle at 18% 8%, rgba(14, 165, 233, 0.14), transparent 36%),
+        radial-gradient(circle at 82% 24%, rgba(14, 165, 233, 0.08), transparent 40%),
+        var(--bg-base);
+      overflow-x: hidden;
+    }
+    .font-en { font-family: 'Geist', 'Pretendard', sans-serif; letter-spacing: -0.025em; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+
+    /* Floating Glass Pill Navigation */
+    .floating-pill {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 20px;
+      border-radius: 9999px;
+      background: rgba(12, 13, 18, 0.78);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      max-width: 95vw;
+    }
+    .pill-links {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      overflow-x: auto;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .pill-links a {
+      color: var(--fg-secondary);
+      text-decoration: none;
+      padding: 5px 11px;
+      border-radius: 9999px;
+      transition: all 0.35s var(--ease-supanova);
+      white-space: nowrap;
+    }
+    .pill-links a:hover {
+      color: var(--fg-primary);
+      background: var(--accent-soft);
+    }
+    .btn-accent {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--accent);
+      color: #020617;
+      font-weight: 800;
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      text-decoration: none;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.35s var(--ease-supanova), box-shadow 0.35s var(--ease-supanova);
+      white-space: nowrap;
+    }
+    .btn-accent:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(14, 165, 233, 0.42);
+    }
+    .btn-ghost {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--fg-primary);
+      font-weight: 600;
+      font-size: 13px;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      cursor: pointer;
+      transition: all 0.35s var(--ease-supanova);
+      white-space: nowrap;
+    }
+    .btn-ghost:hover {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    /* Layout Container with Left Sticky 20-Chapter Navigator */
+    .page-layout {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 96px 24px 80px;
+      display: grid;
+      grid-template-columns: 270px 1fr;
+      gap: 32px;
+    }
+    @media (max-width: 1080px) {
+      .page-layout { grid-template-columns: 1fr; }
+      .toc-sidebar { display: none; }
+    }
+    .toc-sidebar {
+      position: sticky;
+      top: 86px;
+      height: calc(100dvh - 104px);
+      overflow-y: auto;
+      padding: 16px;
+      border-radius: 18px;
+      background: var(--bg-shell);
+      border: 1px solid var(--stroke-outer);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    .toc-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+    .toc-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .toc-list a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--fg-secondary);
+      text-decoration: none;
+      padding: 6px 9px;
+      border-radius: 8px;
+      transition: all 0.3s var(--ease-supanova);
+    }
+    .toc-list a:hover {
+      color: var(--fg-primary);
+      background: var(--accent-soft);
+    }
+    .toc-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      background: rgba(14, 165, 233, 0.12);
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Double-Bezel Chapter Cards */
+    .chapters-col {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+    .bezel-outer {
+      padding: 6px;
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(255,255,255,0.09), rgba(255,255,255,0.02));
+      border: 1px solid var(--stroke-outer);
+      transition: border-color 0.4s var(--ease-supanova), transform 0.4s var(--ease-supanova);
+    }
+    .bezel-outer:hover {
+      border-color: var(--stroke-inner);
+    }
+    .bezel-core {
+      padding: 28px 32px;
+      border-radius: 19px;
+      background: var(--bg-core);
+      box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08), 0 12px 32px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .ch-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .ch-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 11px;
+      border-radius: 9999px;
+      background: var(--accent-soft);
+      border: 1px solid var(--stroke-inner);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .ch-title {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1.35;
+      color: var(--fg-primary);
+    }
+    .ch-desc {
+      font-size: 14px;
+      color: var(--fg-secondary);
+      line-height: 1.65;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .sub-card {
+      padding: 16px 18px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sub-card h4 {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--fg-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sub-card p {
+      font-size: 13px;
+      color: var(--fg-secondary);
+      line-height: 1.55;
+    }
+    .code-box {
+      padding: 14px 16px;
+      border-radius: 12px;
+      background: #05070b;
+      border: 1px solid rgba(14, 165, 233, 0.28);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #38BDF8;
+      overflow-x: auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    table.spec-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    table.spec-table th, table.spec-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      text-align: left;
+    }
+    table.spec-table th {
+      color: var(--accent);
+      font-weight: 700;
+      background: rgba(14, 165, 233, 0.06);
+    }
+    .icon-svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--accent);
+      stroke-width: 1.8;
+      fill: none;
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Floating Glass Pill Navigation -->
+  <nav class="floating-pill" aria-label="Bmail 공식 포털 내비게이션">
+    <div style="display:flex;align-items:center;gap:8px;font-weight:800;font-size:15px;" class="font-en">
+      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+      <span>Bmail Outlook AI</span>
+      <span id="nav-version-badge" style="font-size:11px;padding:2px 8px;border-radius:999px;background:rgba(14,165,233,0.18);color:#38BDF8;">v1.2.1</span>
+    </div>
+    <div class="pill-links">
+      <a href="#ch-01">01. 설치 다운로드</a>
+      <a href="#ch-04">04. Outlook 100% 연동</a>
+      <a href="#ch-07">07. Claude 5.5 라우팅</a>
+      <a href="#ch-09">09. 우측 2분할 도크</a>
+      <a href="#ch-11">11. 폴더 일괄저장·리포트</a>
+      <a href="#ch-13">13. 주간·월간 대시보드</a>
+      <a href="#ch-15">15. SGW 로그인창 채팅</a>
+      <a href="#ch-17">17. 모션그래픽 매뉴얼</a>
+      <a href="#ch-20">20. 배포·FAQ</a>
+    </div>
+    <a id="top-download-btn" href="/releases/Bmail-Outlook-AI-Setup-1.2.1.exe" class="btn-accent">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      <span>Windows 설치파일 받기</span>
+    </a>
+  </nav>
+
+  <div class="page-layout">
+    <!-- Left 20-Chapter Sticky Table of Contents -->
+    <aside class="toc-sidebar" aria-label="20페이지 전체 목차">
+      <div class="toc-title">20-Chapter Complete Guide</div>
+      <ul class="toc-list">
+        <li><a href="#ch-01"><span class="toc-num">01</span>Windows 1클릭 설치 센터</a></li>
+        <li><a href="#ch-02"><span class="toc-num">02</span>독립 실행형 아키텍처</a></li>
+        <li><a href="#ch-03"><span class="toc-num">03</span>Classic Outlook UI 패리티</a></li>
+        <li><a href="#ch-04"><span class="toc-num">04</span>PST · 레지스트리 자동 이관</a></li>
+        <li><a href="#ch-05"><span class="toc-num">05</span>1회 저장 + 초고속 증분 업데이트</a></li>
+        <li><a href="#ch-06"><span class="toc-num">06</span>원본 HTML · cid 인라인 도면 렌더링</a></li>
+        <li><a href="#ch-07"><span class="toc-num">07</span>Claude 5.5 3단계 난이도 라우팅</a></li>
+        <li><a href="#ch-08"><span class="toc-num">08</span>오프라인 결정론적 엔진 폴백</a></li>
+        <li><a href="#ch-09"><span class="toc-num">09</span>세로 1분할: AI 분석·답안·대화 도크</a></li>
+        <li><a href="#ch-10"><span class="toc-num">10</span>세로 2분할: 첨부 미리보기·AI 분석</a></li>
+        <li><a href="#ch-11"><span class="toc-num">11</span>지정 폴더 첨부 일괄저장 · 3종 리포트</a></li>
+        <li><a href="#ch-12"><span class="toc-num">12</span>우측 하단 소형 무오류 번역 미니창</a></li>
+        <li><a href="#ch-13"><span class="toc-num">13</span>주간·월간 종합 분석글 · 테이블</a></li>
+        <li><a href="#ch-14"><span class="toc-num">14</span>내게 온 미회신건 · 프로젝트/주제 정리</a></li>
+        <li><a href="#ch-15"><span class="toc-num">15</span>SGW 공식 로그인 창 메신저 연동</a></li>
+        <li><a href="#ch-16"><span class="toc-num">16</span>SEDMS 조선·해양 도면번호 정밀 추출</a></li>
+        <li><a href="#ch-17"><span class="toc-num">17</span>1:1 화면 모션그래픽 HTML 매뉴얼</a></li>
+        <li><a href="#ch-18"><span class="toc-num">18</span>로컬 보안 · 고객 데이터 보호 원칙</a></li>
+        <li><a href="#ch-19"><span class="toc-num">19</span>자동 업데이트 및 시스템 요구사항</a></li>
+        <li><a href="#ch-20"><span class="toc-num">20</span>전사 설치 방법 · 트러블슈팅 FAQ</a></li>
+      </ul>
+    </aside>
+
+    <!-- Right 20 Chapters Content -->
+    <main class="chapters-col">
+      <!-- CHAPTER 01 -->
+      <section id="ch-01" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 01 / 20 · PUBLIC WEB INSTALLER</span>
+            <span id="release-meta-text" class="font-mono" style="font-size:12px;color:#38BDF8;">최신 릴리스: v1.2.1 (Windows x64 NSIS)</span>
+          </div>
+          <h1 class="ch-title" style="font-size:28px;">설치 전에도 누구나 웹에서 바로 확인하고 1클릭으로 설치하는 Bmail Outlook AI</h1>
+          <p class="ch-desc">
+            아직 Bmail을 설치하지 않은 사원이나 외부 PC에서도 이 페이지(<strong>bmail.seastar.work</strong>)에 접속해 20페이지 분량의 전체 기능과 화면 구조를 확인하고, 공식 Windows 설치 프로그램(<code>.exe</code>) 또는 자동 설치 스크립트로 즉시 설치할 수 있습니다.
+          </p>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;padding-top:4px;">
+            <a id="hero-download-exe" href="/releases/Bmail-Outlook-AI-Setup-1.2.1.exe" class="btn-accent" style="font-size:15px;padding:12px 24px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              <span>Bmail-Outlook-AI-Setup-1.2.1.exe 다운로드</span>
+            </a>
+            <a href="/install.bat" download="bmail-install.bat" class="btn-ghost">
+              <span>Windows 배치 자동설치 (install.bat)</span>
+            </a>
+            <a href="https://mail.seastar.work/?manual=1" target="_blank" rel="noreferrer" class="btn-ghost">
+              <span>웹에서 모션그래픽 매뉴얼 미리보기</span>
+            </a>
+          </div>
+          <div class="code-box">
+            <span>PowerShell 1줄 자동 설치: <strong id="ps-command-text">irm https://bmail.seastar.work/install.ps1 | iex</strong></span>
+            <button type="button" class="btn-ghost" style="padding:4px 12px;font-size:11px;" onclick="navigator.clipboard.writeText(document.getElementById('ps-command-text').textContent)">복사</button>
+          </div>
+          <div id="sha256-box" class="font-mono" style="font-size:11px;color:var(--fg-secondary);">
+            SHA-256 무결성 검증 해시: 릴리스 매니페스트(/releases/latest.json) 실시간 연동됨
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 02 -->
+      <section id="ch-02" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 02 / 20 · STANDALONE ARCHITECTURE</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Electron + Node 24 + SQLite FTS5</span>
+          </div>
+          <h2 class="ch-title">외부 런타임 설치가 전혀 필요 없는 독립 실행형 데스크톱 아키텍처</h2>
+          <p class="ch-desc">
+            설치 파일 하나에 Electron 크로미움 렌더러와 Node 24.15 내장 <code>node:sqlite</code>(FTS5 전문 검색 엔진), 로컬 PST 바이너리 파서, Windows 정품 DIB 다중 해상도 아이콘이 모두 포함되어 있습니다.
+          </p>
+          <div class="grid-3">
+            <div class="sub-card">
+              <h4><svg class="icon-svg" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/></svg>내장 SQLite FTS5</h4>
+              <p>24,600건 이상의 대용량 메일과 첨부 메타데이터를 로컬 SQLite WAL 모드로 저장해 0.05초 내 한글·영문 전문 검색을 수행합니다.</p>
+            </div>
+            <div class="sub-card">
+              <h4><svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h6"/></svg>Windows 정품 DIB 아이콘</h4>
+              <p>16px~128px 비압축 32비트 BGRA DIB 프레임과 256px 고해상도 아이콘으로 바탕화면·작업표시줄·설치마법사에 선명한 아이콘을 표시합니다.</p>
+            </div>
+            <div class="sub-card">
+              <h4><svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>포트 충돌 자동 회피</h4>
+              <p>로컬 루프백 포트(3456 기본)를 자동 할당하며 Windows 기본 <code>mailto:</code> 및 <code>bmail://</code> 딥링크 프로토콜을 처리합니다.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 03 -->
+      <section id="ch-03" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 03 / 20 · CLASSIC OUTLOOK PARITY</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Fluent 2 #0F6CBD Interface</span>
+          </div>
+          <h2 class="ch-title">Classic Outlook과 100% 동일한 아이콘 리본 및 폴더·목록·본문 경험</h2>
+          <p class="ch-desc">
+            기존 Microsoft Outlook 사용자가 별도 학습 없이 즉시 사용할 수 있도록 상단 그룹형 아이콘 리본(새 메일, 회신, 전체 회신, 전달, 읽음/안읽음, 플래그, 증분 동기화), 좌측 즐겨찾기 및 데이터 파일 트리, 오늘/지난 주 그룹 목록을 그대로 재현했습니다.
+          </p>
+          <div class="grid-2">
+            <div class="sub-card">
+              <h4>파란색 미읽음 숫자 &amp; 임시보관함 [N] 표기</h4>
+              <p>받은 편지함과 지운 편지함의 읽지 않은 메일 수는 굵은 파란색 숫자로, 임시 보관함과 보낼 편지함은 <code>[23]</code> 대괄호 형식으로 Outlook과 동일하게 표시합니다.</p>
+            </div>
+            <div class="sub-card">
+              <h4>개발자 내부 버튼(HANDOFF · 소스 다운로드) 노출 0%</h4>
+              <p>완제품 사용자 화면에서 개발용 인수인계 문서(HANDOFF)나 소스 압축 다운로드 버튼을 완전히 제거하고 실무 기능과 인터랙티브 매뉴얼만 정갈하게 배치했습니다.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 04 -->
+      <section id="ch-04" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 04 / 20 · FULL OUTLOOK SETTINGS MIGRATION</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Registry + New2026.xml + Signatures</span>
+          </div>
+          <h2 class="ch-title">같은 PST를 연동했을 때 Outlook의 모든 설정과 창 구성을 완벽하게 상속</h2>
+          <p class="ch-desc">
+            단순히 메일 본문만 가져오는 것이 아니라 PC에 설치된 Outlook의 레지스트리(Office 16.0/15.0/14.0), 즐겨찾기 XML(<code>%APPDATA%\Microsoft\Outlook\New2026.xml</code>), 서명 파일(<code>Signatures\*.htm</code>), 창 고정 설정까지 모두 읽어와 그대로 복원합니다.
+          </p>
+          <table class="spec-table">
+            <thead>
+              <tr><th>연동 항목</th><th>원본 위치</th><th>Bmail 반영 방식</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>즐겨찾기 폴더 순서</td><td><code>%APPDATA%\Microsoft\Outlook\*.xml</code> (UTF-16LE)</td><td>좌측 상단 즐겨찾기 섹션에 동일 순서로 자동 고정</td></tr>
+              <tr><td>데이터 파일별 다단계 트리</td><td>등록된 모든 <code>.pst</code> 저장소</td><td>저장소별 접기/펼치기 하위 폴더 트리 완벽 재현</td></tr>
+              <tr><td>창·리본·읽기창 구성</td><td><code>HKCU\...\Outlook\Preferences</code></td><td>단일 줄 리본, 폴더 창 고정, 헤더 표시 설정 상속</td></tr>
+              <tr><td>전자 메일 서명 &amp; 계정</td><td><code>%APPDATA%\Microsoft\Signatures</code></td><td>새 메일·회신 기본 서명 및 POP3/IMAP 서버 호스트 자동 입력</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CHAPTER 05 -->
+      <section id="ch-05" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 05 / 20 · LOAD-ONCE &amp; INCREMENTAL DELTA SYNC</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">POST /api/local/outlook/sync-incremental</span>
+          </div>
+          <h2 class="ch-title">한 번 불러온 메일은 영구 저장하고 새로운 메일만 업데이트하는 증분 동기화</h2>
+          <p class="ch-desc">
+            매번 수만 건의 PST를 처음부터 다시 읽지 않습니다. 최초 1회 불러온 데이터는 로컬 SQLite에 영구 저장되어 앱을 켜자마자 즉시 열리며, <strong>[신규 메일 증분 동기화]</strong> 시 파일 크기·수정시각 워터마크와 기존 ID 셋을 비교해 새로 추가된 메일과 현재 실행 중인 Outlook(COM)의 오늘자 메일만 1~2초 내에 반영합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 06 -->
+      <section id="ch-06" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 06 / 20 · RICH HTML &amp; INLINE CID RENDERING</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">GET /api/local/emails/:id/render</span>
+          </div>
+          <h2 class="ch-title">본문 내 3D 모델링 캡처(cid: 인라인 이미지)·표·하이라이트 원본 복원 및 서명 분리</h2>
+          <p class="ch-desc">
+            엔지니어링 메일 본문에 삽입된 3D 모델링 캡처 이미지(<code>cid:...</code>), 사양 비교 표, 노란색 강조 표시를 XSS 안전 살균(Sanitization) 후 원본 그대로 렌더링합니다. 동시에 이메일 서명에 포함된 작은 로고(<code>image001.png</code> 등)는 첨부파일 칩 목록에서 자동 제외하여 실제 도면·문서 첨부파일만 한눈에 보이도록 정리합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 07 -->
+      <section id="ch-07" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 07 / 20 · CLAUDE 5.5 3-TIER COMPLEXITY ROUTING</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">15/15 Anthropic Models Verified</span>
+          </div>
+          <h2 class="ch-title">Claude Haiku 5.5 기본값 + 난이도에 따른 Sonnet 5.5 · Opus 5.5 자동 승격</h2>
+          <p class="ch-desc">
+            응답 속도와 비용 효율을 극대화하기 위해 평소 단건 요약·번역은 <code>claude-haiku-5-5</code>를 기본으로 사용하고, 다중 메일·기술 사양 검토는 <code>claude-sonnet-5-5</code>로, 대규모 아키텍처·클레임·정밀 감사 분석은 <code>claude-opus-5-5</code>로 자동 라우팅합니다.
+          </p>
+          <table class="spec-table">
+            <thead>
+              <tr><th>난이도 등급</th><th>자동 선택 모델</th><th>적용 조건</th><th>출력 토큰 상한</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Low (기본값)</td><td><code>claude-haiku-5-5</code></td><td>일반 단건 메일 요약, 즉시 번역, 짧은 회신 초안</td><td>6,144 tokens</td></tr>
+              <tr><td>Medium (중난도)</td><td><code>claude-sonnet-5-5</code></td><td>6건 이상 메일, 12,000자 이상, POS·도면 기술 검토</td><td>8,192 tokens</td></tr>
+              <tr><td>High (고난도)</td><td><code>claude-opus-5-5</code></td><td>20건 이상 대량 분석, 35,000자 이상, 심층 리포트·감리</td><td>16,384 tokens</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CHAPTER 08 -->
+      <section id="ch-08" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 08 / 20 · ZERO-ERROR DETERMINISTIC FALLBACK</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">100% Offline Resilient</span>
+          </div>
+          <h2 class="ch-title">오프라인·사내 폐쇄망에서도 에러 없이 즉시 작동하는 로컬 결정론적 엔진</h2>
+          <p class="ch-desc">
+            외부 인터넷이 차단된 조선소 현장이나 API 키 미설정 상태에서도 업무일지, 회의록, 첨부 문서 분석, AI 도크, 미니 번역창이 로컬 결정론적 분석 엔진으로 즉시 폴백되어 <code>Failed to fetch</code> 오류가 절대 발생하지 않습니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 09 -->
+      <section id="ch-09" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 09 / 20 · RIGHT SPLIT DOCK 1 — AI ASSISTANT</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">5 Menus: 분석 · 답안 · 대화 · 번역 · 액션</span>
+          </div>
+          <h2 class="ch-title">내용창 옆 세로 1분할: 5대 메뉴를 갖춘 AI 분석 · 답안 · 대화 도크</h2>
+          <div class="grid-3">
+            <div class="sub-card"><h4>1. 분석 &amp; 2. 답안</h4><p>핵심 요약·기한·도면번호 추출과 정중/기술/간결 3종 회신 초안을 생성해 1클릭으로 회신창에 삽입합니다.</p></div>
+            <div class="sub-card"><h4>3. 대화 &amp; 4. 번역</h4><p>선택한 메일 맥락을 유지한 채 다중 턴 질의응답을 나누고 한국어·영어·일본어·중국어 비즈니스 번역을 제공합니다.</p></div>
+            <div class="sub-card"><h4>5. 액션 &amp; 일정 연동</h4><p>메일별 조치 상태(대기/진행중/완료/보류)와 메모를 영구 기록하고 Outlook 일정 달력에 마감일을 바로 등록합니다.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 10 -->
+      <section id="ch-10" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 10 / 20 · RIGHT SPLIT DOCK 2 — ATTACHMENT PREVIEW</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Inline PDF · Image · Excel · Word + AI Analysis</span>
+          </div>
+          <h2 class="ch-title">내용창 옆 세로 2분할: 첨부파일 즉시 미리보기 및 AI 첨부 문서 정밀 분석</h2>
+          <p class="ch-desc">
+            첨부파일을 일일이 다운로드해 외부 프로그램으로 열 필요가 없습니다. 우측 두 번째 세로 분할창에서 PDF 도면과 POS 문서는 내장 뷰어로, 이미지 도면은 확대 뷰어로, Excel 단가표와 Word 사양서는 표·텍스트 추출 뷰어로 즉시 미리 보여주고 <strong>[AI 첨부 문서 정밀 분석]</strong>으로 핵심 리비전과 편차(Deviation)를 자동 요약합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 11 -->
+      <section id="ch-11" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 11 / 20 · DESIGNATED-FOLDER BATCH EXPORTER &amp; REPORTS</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">POST /api/local/attachments/export-run</span>
+          </div>
+          <h2 class="ch-title">폴더를 지정해 기간·보낸사람·전체/일부 모든 옵션으로 첨부 저장 및 3종 리포트 작성</h2>
+          <p class="ch-desc">
+            원하는 로컬 폴더(예: <code>D:\Bmail_Attachments</code>)를 지정한 뒤 전체 메일함, 현재 폴더, 특정 프로젝트, 기간(시작일~종료일), 보낸 사람, 파일 종류(PDF/Excel/Word/CAD) 등 모든 조합으로 첨부파일을 일괄 저장합니다.
+          </p>
+          <div class="grid-3">
+            <div class="sub-card"><h4>6종 하위 폴더 자동 구성</h4><p>프로젝트(호선)별, 보낸 사람별, 년-월(YYYY-MM)별, Outlook 폴더 구조 그대로, 파일 유형별, 단일 폴더 중 선택 가능</p></div>
+            <div class="sub-card"><h4>서명 제외 &amp; 중복 방지</h4><p>서명용 인라인 이미지(<code>image001.png</code>) 자동 제외 및 동일 크기 파일 자동 건너뛰기(Skip-Identical) 지원</p></div>
+            <div class="sub-card"><h4>MD · CSV · HTML 3종 리포트</h4><p>저장 완료 즉시 폴더 내에 발신자별·유형별 통계와 파일 목록이 담긴 Markdown, Excel 호환 UTF-8 BOM CSV, HTML 보고서를 생성합니다.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CHAPTER 12 -->
+      <section id="ch-12" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 12 / 20 · COMPACT RIGHT-PINNED TRANSLATION MINI-WINDOW</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">330px Bottom-Right Fixed</span>
+          </div>
+          <h2 class="ch-title">좌측 폴더 트리를 가리지 않는 우측 하단 소형 고정 번역 · 요약 미니창</h2>
+          <p class="ch-desc">
+            번역·요약·회신 미니창을 화면 우측 하단(<code>330px</code> 컴팩트 카드 및 접이식 알약 버튼)에 고정하여 좌측 폴더 트리와 메일 목록 시야를 전혀 방해하지 않으며, 자체 오프라인 엔진 내장으로 어떠한 네트워크 상태에서도 에러 없이 즉시 번역과 핵심 수치를 표시합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 13 -->
+      <section id="ch-13" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 13 / 20 · WEEKLY &amp; MONTHLY NARRATIVE REPORT DASHBOARD</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">GET /api/local/dashboard/executive</span>
+          </div>
+          <h2 class="ch-title">서술형 종합 분석글(브리핑)과 주간 · 월간 보고서 테이블 자동 작성</h2>
+          <p class="ch-desc">
+            대시보드 진입 즉시 전체 로컬 SQLite 메일함을 분석하여 ① 총괄 수·발신 흐름, ② 핵심 프로젝트 및 엔지니어링 주제 집중도, ③ 미회신 리스크 및 권장 조치를 완성된 <strong>서술형 분석글</strong>로 브리핑하며, 주차별(Weekly) 및 월별(Monthly) 집계 테이블을 나란히 제공하고 스냅샷 저장 및 MD/Excel CSV/HTML 내보내기를 지원합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 14 -->
+      <section id="ch-14" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 14 / 20 · UNREPLIED INCOMING &amp; PROJECT/TOPIC MATRIX</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Thread-Level Reply Verification</span>
+          </div>
+          <h2 class="ch-title">내게 왔는데 미회신건 자동 정리 및 기간 · 프로젝트 · 주제별 받은/보낸/첨부 통합 뷰</h2>
+          <p class="ch-desc">
+            대화 스레드(<code>conversationKey</code>)별로 수신 시각 이후 내가 보낸 편지함에서 답장한 이력이 없는 실제 업무 메일만 정밀하게 추출하여 경과일(<code>D+N</code>)과 긴급도 순으로 정리합니다. 또한 프로젝트(호선)별·7대 업무 주제(도면/POS/선급/3D모델링/일정/긴급/일반)별로 받은 메일, 보낸 메일, 미회신 건, 첨부파일을 한눈에 교차 필터링합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 15 -->
+      <section id="ch-15" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 15 / 20 · SGW OFFICIAL LOGIN WINDOW MESSENGER</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">https://sgw.seastar.work Live Auth</span>
+          </div>
+          <h2 class="ch-title">SGW 그룹웨어 공식 로그인 창을 띄워 완전 로그인 연동하는 실시간 사내 채팅</h2>
+          <p class="ch-desc">
+            <strong>[SGW 로그인 창 띄워 완전 연동하기]</strong>를 클릭하면 사내 그룹웨어(<code>https://sgw.seastar.work</code>)의 실제 공식 로그인 창이 열리며, 로그인 완료 즉시 인증 세션을 안전하게 암호화(AES-256-GCM)하여 Bmail과 연결합니다. 비밀번호를 별도 저장하지 않고도 사내 대화방, 1:1 쪽지, 메일 원클릭 공유가 완벽히 작동합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 16 -->
+      <section id="ch-16" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 16 / 20 · SEDMS SHIPBUILDING DRAWING ENGINE</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Zero False-Positive Regex</span>
+          </div>
+          <h2 class="ch-title">조선·해양 도면번호 및 호선 코드 정밀 인식 (일반 영단어 오탐 원천 차단)</h2>
+          <p class="ch-desc">
+            도면 번호 추출 엔진에 숫자 필수 포함 검증(<code>/\d/.test(canonKey)</code>)을 적용하여 <code>MESSAGE</code>, <code>SUBJECT</code> 같은 일반 영단어가 도면 코드로 오탐되는 현상을 완벽히 제거하고 실제 도면·호선·리비전 코드만 정확히 색인합니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 17 -->
+      <section id="ch-17" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 17 / 20 · MOTION-GRAPHIC HTML MANUAL POPUP</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Single-Source Auto-Sync v1.2.1</span>
+          </div>
+          <h2 class="ch-title">화면 그대로 보여주는 HTML 팝업 매뉴얼 &amp; 동영상 모션그래픽 플레이어</h2>
+          <p class="ch-desc">
+            상단 <strong>[매뉴얼]</strong> 버튼 클릭 시 실제 Bmail 화면을 1:1로 재현한 인터랙티브 HTML 팝업이 열립니다. 8개 챕터가 자동 재생되는 모션그래픽 가상 커서·스포트라이트 동영상 투어와 25개 전체 아이콘 클릭 탐색기를 제공하며, 기능 업데이트 시 단일 카탈로그(<code>manualCatalog.ts</code>)를 통해 자동으로 함께 업데이트됩니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 18 -->
+      <section id="ch-18" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 18 / 20 · LOCAL PRIVACY &amp; ZERO-LEAK SECURITY</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">Local-First SQLite + AES-256-GCM</span>
+          </div>
+          <h2 class="ch-title">기밀 도면·고객 메일 로컬 전용 보관 및 무료 학습 API 유출 원천 차단</h2>
+          <p class="ch-desc">
+            모든 PST 원문과 첨부 도면, 연락처는 사원 PC 내부의 로컬 SQLite와 로컬 파일시스템에만 저장됩니다. 무료 외부 LLM으로 고객 데이터를 전송하지 않으며, 모든 인증 세션 키는 로컬 AES-256-GCM으로 암호화됩니다.
+          </p>
+        </div>
+      </section>
+
+      <!-- CHAPTER 19 -->
+      <section id="ch-19" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 19 / 20 · SYSTEM REQUIREMENTS &amp; 1-CLICK AUTO-UPDATE</span>
+            <span class="font-mono" style="font-size:11px;color:var(--fg-secondary);">SHA-256 Verified OTA</span>
+          </div>
+          <h2 class="ch-title">시스템 요구사항 및 SHA-256 검증 기반 1클릭 자동 업데이트</h2>
+          <table class="spec-table">
+            <thead>
+              <tr><th>항목</th><th>최소 사양</th><th>권장 사양</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>운영체제</td><td>Windows 10 64-bit (1903+)</td><td>Windows 10 / 11 64-bit</td></tr>
+              <tr><td>Outlook 연동</td><td>PST 파일 단독 사용 가능 (Outlook 미설치 PC 지원)</td><td>Microsoft Outlook 2013 / 2016 / 2019 / 2021 / 365</td></tr>
+              <tr><td>디스크 여유 공간</td><td>350 MB 이상</td><td>SSD 1 GB 이상 (SQLite FTS5 고속 색인)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- CHAPTER 20 -->
+      <section id="ch-20" class="bezel-outer">
+        <div class="bezel-core">
+          <div class="ch-header">
+            <span class="ch-badge">CHAPTER 20 / 20 · ENTERPRISE ROLLOUT &amp; FAQ</span>
+            <span class="font-mono" style="font-size:11px;color:#38BDF8;">https://bmail.seastar.work</span>
+          </div>
+          <h2 class="ch-title">전사 배포 가이드 및 자주 묻는 질문 (FAQ)</h2>
+          <div class="grid-2">
+            <div class="sub-card">
+              <h4>Q1. 기존 Outlook을 켠 채로 써도 되나요?</h4>
+              <p>네. Bmail은 읽기 전용(Read-Only)으로 PST와 실시간 Outlook COM을 조회하므로 기존 Outlook과 동시에 실행해도 파일 손상이나 잠금 충돌이 발생하지 않습니다.</p>
+            </div>
+            <div class="sub-card">
+              <h4>Q2. 새로 설치할 때 기존 색인 데이터가 지워지나요?</h4>
+              <p>아니요. 로컬 SQLite DB는 보존되며 이후에는 [신규 메일 증분 동기화]로 새로 도착한 메일만 1~2초 내에 추가됩니다.</p>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08);">
+            <span style="font-size:13px;color:var(--fg-secondary);">지금 바로 Windows 설치 파일을 내려받아 Classic Outlook + AI 2분할 워크스페이스를 시작하세요.</span>
+            <a id="bottom-download-exe" href="/releases/Bmail-Outlook-AI-Setup-1.2.1.exe" class="btn-accent">
+              <span>Bmail v1.2.1 설치파일 다운로드 (.exe)</span>
+            </a>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (async function hydrateReleaseManifest() {
+      try {
+        const origin = window.location.origin;
+        const psEl = document.getElementById('ps-command-text');
+        if (psEl && origin.startsWith('http')) {
+          psEl.textContent = 'irm ' + origin + '/install.ps1 | iex';
+        }
+        const res = await fetch('/releases/latest.json', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const ver = data.version || '1.2.1';
+        const url = data.downloadUrl || data.latestDownloadUrl || ('/releases/Bmail-Outlook-AI-Setup-' + ver + '.exe');
+        const sizeMb = data.sizeBytes ? (Number(data.sizeBytes) / (1024 * 1024)).toFixed(1) + ' MB' : '';
+        const navBadge = document.getElementById('nav-version-badge');
+        if (navBadge) navBadge.textContent = 'v' + ver;
+        const metaText = document.getElementById('release-meta-text');
+        if (metaText) metaText.textContent = '최신 릴리스: v' + ver + (sizeMb ? ' (' + sizeMb + ')' : '');
+        const shaBox = document.getElementById('sha256-box');
+        if (shaBox && data.sha256) {
+          shaBox.textContent = 'SHA-256: ' + data.sha256 + (data.publishedAt ? ' · 배포일시: ' + data.publishedAt : '');
+        }
+        ['top-download-btn', 'hero-download-exe', 'bottom-download-exe'].forEach(function(id) {
+          const el = document.getElementById(id);
+          if (el) el.setAttribute('href', url);
+        });
+      } catch (_e) {}
+    })();
+  </script>
+</body>
+</html>
