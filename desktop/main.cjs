@@ -1048,6 +1048,48 @@ if (!gotSingleLock) {
       }
     });
 
+    let savedPreDockBounds = null;
+    ipcMain.handle('bmail:setCompanionDock', async (_event, opts) => {
+      try {
+        if (!mainWindow || mainWindow.isDestroyed()) {
+          return { ok: false, error: 'mainWindow unavailable' };
+        }
+        const enabled = Boolean(opts && typeof opts === 'object' && opts.enabled);
+        if (enabled) {
+          if (!savedPreDockBounds && !mainWindow.isMaximized()) {
+            savedPreDockBounds = mainWindow.getBounds();
+          }
+          if (mainWindow.isMaximized()) {
+            mainWindow.unmaximize();
+          }
+          const display = screen.getDisplayMatching(mainWindow.getBounds()) || screen.getPrimaryDisplay();
+          const wa = display.workArea;
+          const requestedW = Number(opts?.width ?? 460);
+          const dockW = Math.max(
+            380,
+            Math.min(Math.min(680, wa.width - 120), Number.isFinite(requestedW) ? Math.round(requestedW) : 460)
+          );
+          mainWindow.setBounds({
+            x: wa.x + wa.width - dockW,
+            y: wa.y,
+            width: dockW,
+            height: wa.height,
+          });
+          const alwaysOnTop = opts?.alwaysOnTop !== false;
+          mainWindow.setAlwaysOnTop(alwaysOnTop, 'floating');
+          return { ok: true, docked: true, alwaysOnTop: mainWindow.isAlwaysOnTop(), width: dockW };
+        }
+        mainWindow.setAlwaysOnTop(false);
+        if (savedPreDockBounds) {
+          mainWindow.setBounds(savedPreDockBounds);
+          savedPreDockBounds = null;
+        }
+        return { ok: true, docked: false, alwaysOnTop: false };
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    });
+
     ipcMain.handle('bmail:clearSgwAuthSession', async (_event, rawBaseUrl) => {
       try {
         const cleanUrl =

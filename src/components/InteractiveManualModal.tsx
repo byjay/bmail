@@ -140,17 +140,19 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
   const previewState: ManualPreviewStateId =
     mode === 'motion'
       ? currentScene.previewState
-      : activeIcon.zone === 'dashboard'
-        ? 'executive-dashboard'
-        : activeIcon.zone === 'sgw-chat'
-          ? 'sgw-login-chat'
-          : activeIcon.zone === 'attach-dock' && activeIcon.id.includes('batch')
-            ? 'batch-folder-export'
-            : activeIcon.zone === 'attach-dock'
-              ? 'attach-preview'
-              : activeIcon.zone === 'ai-dock'
-                ? 'ai-dock-reply'
-                : 'outlook-overview';
+      : activeIcon.id === 'icon-header-outlook-companion'
+        ? 'outlook-companion'
+        : activeIcon.zone === 'dashboard'
+          ? 'executive-dashboard'
+          : activeIcon.zone === 'sgw-chat'
+            ? 'sgw-login-chat'
+            : activeIcon.zone === 'attach-dock' && activeIcon.id.includes('batch')
+              ? 'batch-folder-export'
+              : activeIcon.zone === 'attach-dock'
+                ? 'attach-preview'
+                : activeIcon.zone === 'ai-dock'
+                  ? 'ai-dock-reply'
+                  : 'outlook-overview';
 
   const handleOpenStandaloneHtmlPopup = () => {
     window.open(
@@ -385,6 +387,9 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                     <span>검색 (제목, 보낸 사람, 22K FD, 도면·본문)</span>
                   </div>
                   <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-[10px]">
+                      Outlook 동반 검증
+                    </span>
                     <span className="px-2 py-0.5 rounded bg-white/20 font-semibold text-[10px]">
                       매뉴얼
                     </span>
@@ -430,8 +435,68 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                   </span>
                 </div>
 
-                {/* Replica Main Body: Switch between Executive Dashboard View vs 4-Column Classic Outlook Workbench */}
-                {previewState === 'executive-dashboard' ? (
+                {/* Replica Main Body: Switch between Executive Dashboard / Companion Sidecar vs Classic Outlook Workbench */}
+                {previewState === 'outlook-companion' ? (
+                  <div className="flex-1 bg-[#EDEBE9] p-2.5 flex gap-2.5 min-h-0 overflow-hidden text-[11px]">
+                    {/* Left: Classic Outlook Desktop Window */}
+                    <div className="flex-1 bg-white border border-slate-300 rounded flex flex-col overflow-hidden">
+                      <div className="px-3 py-1.5 bg-[#0F6CBD] text-white flex items-center justify-between text-[10px] font-bold">
+                        <span>Classic Outlook (ActiveInspector / ActiveExplorer)</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-400 text-slate-950">
+                          2.5s 실시간 감지 연결됨
+                        </span>
+                      </div>
+                      <div className="p-3 space-y-2 flex-1">
+                        <div className="flex items-center justify-between border-b pb-1.5 text-[10px]">
+                          <span className="font-bold text-slate-800">
+                            작성 중 메일: [22K FD] KYTS-1037 수정 POS 송부 건
+                          </span>
+                          <span className="text-slate-500">Outlook 작성창</span>
+                        </div>
+                        <div className="text-[10px] text-slate-700 space-y-1 bg-slate-50 p-2 rounded border">
+                          <div><strong>받는 사람:</strong> partner@external-yard.com (외부 수신자 포함)</div>
+                          <div><strong>본문:</strong> 첨부파일 22K_TLC_수정POS.pdf 확인 부탁드립니다.</div>
+                          <div className="text-rose-700 font-semibold">• 현재 첨부된 파일: 0개 (첨부 누락 의심)</div>
+                        </div>
+                        <div className="p-2 rounded bg-sky-50 border border-sky-200 text-[10px] text-sky-900">
+                          오리지널 Outlook에서 선택하거나 작성 중인 메일을 2.5초 간격으로 읽어 우측 사이드카에서 실시간 검증합니다.
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Electron Companion Sidecar Dock */}
+                    <div className="w-[38%] bg-[#FAF9F8] border-2 border-[#0F6CBD] rounded flex flex-col justify-between p-2.5 text-[10px] shrink-0">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                          <span className="font-bold text-[#0F6CBD]">Outlook 동반 검증 사이드카</span>
+                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[9px]">
+                            우측 도킹 · 항상 위
+                          </span>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="p-1.5 rounded bg-rose-50 border border-rose-200 text-rose-800 font-semibold">
+                            ⚠ 첨부 누락 위험: 본문에 &quot;첨부&quot; 언급 있으나 첨부 0개
+                          </div>
+                          <div className="p-1.5 rounded bg-amber-50 border border-amber-200 text-amber-900 font-semibold">
+                            ⚠ 외부 수신자 민감정보 유출 점검: external-yard.com
+                          </div>
+                          <div className="p-1.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800">
+                            ✓ 수신자/제목 정상 · 추출 도면/기한: KYTS-1037 / 22K FD
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 pt-2 border-t border-slate-200">
+                        <div className="px-2 py-1.5 rounded bg-[#0F6CBD] text-white text-center font-bold">
+                          MailItem.Display()로 오리지널 Outlook 작성창 열기
+                        </div>
+                        <div className="text-[9px] text-slate-500 text-center">
+                          verify-item · send-via-com (action: display) · bmail:setCompanionDock
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : previewState === 'executive-dashboard' ? (
                   <div className="flex-1 bg-[#FAF9F8] p-3 flex flex-col gap-2.5 overflow-hidden text-[11px]">
                     <div className="bg-white border border-slate-200 rounded-lg p-2.5 flex items-center justify-between">
                       <div className="flex items-center gap-2">

@@ -5,14 +5,14 @@
  * updating this catalog automatically updates:
  *   1. In-app Interactive HTML Manual Modal (`InteractiveManualModal.tsx`)
  *   2. Standalone HTML Popup Window (`/?manual=1`)
- *   3. Motion-Graphic Video Walkthrough Player (11 scenes)
+ *   3. Motion-Graphic Video Walkthrough Player (12 scenes)
  *   4. Versioned Release Changelog (`MANUAL_CHANGELOG`)
  *
  * Enforced by `src/data/manualCatalog.test.ts` (verifies `MANUAL_VERSION === package.json.version`).
  */
 
-export const MANUAL_VERSION = '1.2.10';
-export const MANUAL_UPDATED_AT = '2026-11-25';
+export const MANUAL_VERSION = '1.3.0';
+export const MANUAL_UPDATED_AT = '2026-11-26';
 
 export type ManualZoneId =
   | 'header'
@@ -58,7 +58,8 @@ export type ManualPreviewStateId =
   | 'attach-preview'
   | 'batch-folder-export'
   | 'executive-dashboard'
-  | 'sgw-login-chat';
+  | 'sgw-login-chat'
+  | 'outlook-companion';
 
 export interface ManualMotionScene {
   id: string;
@@ -86,7 +87,7 @@ export const MANUAL_ZONES: ManualZoneInfo[] = [
   {
     id: 'header',
     label: '상단 글로벌 바',
-    description: '통합 검색, 인터랙티브 매뉴얼, POP3/IMAP, SGW 채팅, 일정, 설정 진입',
+    description: '통합 검색, Outlook 동반 검증 사이드카 모드, 인터랙티브 매뉴얼, POP3/IMAP, SGW 채팅, 일정, 설정 진입',
     accentColor: '#0F6CBD',
   },
   {
@@ -554,6 +555,19 @@ export const MANUAL_ICONS: ManualIconEntry[] = [
     tip: '읽기 창이나 메일 목록 폭을 업무 스타일에 맞게 한 번 맞춰두면 다음 실행 시에도 그대로 복원됩니다.',
     addedInVersion: '1.2.10',
   },
+  {
+    id: 'icon-header-outlook-companion',
+    number: 32,
+    zone: 'header',
+    label: 'Outlook 동반 검증 (사이드카 모드)',
+    xPercent: 70.5,
+    yPercent: 4.5,
+    summary: '클래식 Outlook 옆에 도킹해 ActiveInspector/ActiveExplorer 메일 2.5s 실시간 감지 · 발송 전 위험 검증 · MailItem.Display() 열기',
+    detail: '아웃룩을 완전 대체하지 않고 클래식 Outlook 우측에 사이드카로 도킹(bmail:setCompanionDock · 항상 위)하여 ActiveInspector/ActiveExplorer 선택·작성 메일을 2.5초 간격으로 실시간 감지합니다. 발송 전 첨부 누락·수신자/제목 누락·외부 수신자 민감정보 유출·조선 도면/기한 자동 추출(POST /api/local/outlook/verify-item)을 수행하고 회신 초안을 오리지널 Outlook 작성창(MailItem.Display(), POST /api/local/outlook/send-via-com action: display)으로 바로 엽니다.',
+    backendEndpoint: 'POST /api/local/outlook/verify-item',
+    tip: '우측 사이드카 도킹·항상 위를 켜두면 클래식 Outlook에서 발송 버튼을 누르기 직전 첨부 누락과 외부 유출 위험을 즉시 점검할 수 있습니다.',
+    addedInVersion: '1.3.0',
+  },
 ];
 
 export const MANUAL_MOTION_SCENES: ManualMotionScene[] = [
@@ -722,9 +736,35 @@ export const MANUAL_MOTION_SCENES: ManualMotionScene[] = [
     previewState: 'outlook-overview',
     badgeText: 'STEP 11 · 경계선 드래그 폭 조절',
   },
+  {
+    id: 'scene-12-outlook-companion-sidecar',
+    step: 12,
+    title: 'Outlook 동반 검증 사이드카 · 발송 전 위험 검증 & 원창 열기',
+    subtitle: 'ActiveInspector/ActiveExplorer 2.5s 감지 · 첨부/민감정보 검증 · MailItem.Display() & 우측 도킹',
+    narration:
+      '상단 [Outlook 동반 검증]을 누르면 클래식 Outlook 옆 우측 사이드카로 도킹(bmail:setCompanionDock)되어 2.5초마다 선택·작성 메일을 실시간 감지하고, 첨부·수신자/제목 누락과 외부 민감정보 유출·조선 도면/기한을 검증한 뒤 MailItem.Display()로 오리지널 작성창을 직접 엽니다.',
+    durationSec: 7,
+    targetIconId: 'icon-header-outlook-companion',
+    zone: 'header',
+    cursor: { x: 70.5, y: 4.5 },
+    spotlight: { x: 63.0, y: 1.5, w: 36.0, h: 95.0 },
+    previewState: 'outlook-companion',
+    badgeText: 'STEP 12 · Outlook 동반 검증 사이드카',
+  },
 ];
 
 export const MANUAL_CHANGELOG: ManualChangelogEntry[] = [
+  {
+    version: '1.3.0',
+    date: '2026-11-26',
+    headline:
+      'Outlook 동반 검증 사이드카 모드(2.5s 실시간 감지 · 발송 전 위험 검증 · MailItem.Display() 원창 열기 · Electron 우측 도킹)',
+    highlights: [
+      'Outlook 동반 검증 사이드카 모드 추가: 아웃룩을 완전 대체하지 않고 클래식 Outlook 옆에 붙어 ActiveInspector/ActiveExplorer 선택·작성 메일을 2.5s 실시간 감지',
+      '발송 전 실시간 위험 검증(POST /api/local/outlook/verify-item): 첨부 누락·수신자/제목 누락·외부 수신자 민감정보 유출·조선 도면/기한 자동 추출',
+      '회신 초안 오리지널 Outlook 작성창 직접 열기(MailItem.Display(), POST /api/local/outlook/send-via-com action: display) 및 Electron 우측 사이드카 도킹·항상 위(bmail:setCompanionDock) 지원',
+    ],
+  },
   {
     version: '1.2.10',
     date: '2026-11-25',

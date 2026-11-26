@@ -1,11 +1,21 @@
-# HANDOFF.md — Bmail v1.2.10 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
+# HANDOFF.md — Bmail v1.3.0 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
 
-> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.2.10`)
+> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.3.0`)
 > **보안 정책**: 프로덕션 사용자 UI에서 `[HANDOFF]` 및 `[전체 코드 다운로드]` 버튼은 제거되었으며, `/api/export/handoff` 엔드포인트 삭제(HTTP `404`), `/api/export/source-archive*`는 `BMAIL_DEV_EXPORT === 'true'` 개발 환경 전용으로 격리되었습니다(기본 HTTP `404`).
 
 ---
 
-## 0. 2026-11-25 v1.2.10 가로 구역 드래그 크기 조절 · 최근 14일 미확인 자동 알림 팝업 실측 현황
+## 0. 2026-11-26 v1.3.0 오리지널 Outlook 동반 분석·발송 전 검증 사이드카 모드 실측 현황
+
+| 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
+|---|---|---|
+| **Outlook 실시간 선택·작성 감지 & 0ms 발송 전 검증** | ✅ 실측 완료 | `src/utils/outlookCompanionVerifier.ts` (브라우저 안전 0ms 검증기 `verifyOutlookItemSafety`: 첨부 누락·수신자/제목 누락·외부 도메인 민감정보·조선 도면번호/기한 추출), `src/services/outlookCompanionBridge.ts` (`readActiveOutlookItemAsync`: `ActiveInspector` 작성/열람 → `ActiveExplorer` 선택 비차단 COM 조회), `src/services/outlookCompanionBridge.test.ts` (4/4 PASS). `server.ts` (`GET /api/local/outlook/active-item` `1500ms` single-flight 캐시 · `POST /api/local/outlook/verify-item`). 실서버(`3475`) E2E에서 `active-item` HTTP `200`, `verify-item` 차단 검증(`status: block`, `score: 35`, `missing_attachment`/`external_sensitive_leak`) 실측 *(클래식 Outlook 실행 중 COM 실시간 감지는 Outlook 미실행 환경으로 `[미검증]`)* |
+| **동반 사이드카 UI · 오리지널 Outlook 초안 열기 · 우측 도킹** | ✅ 실측 완료 | `src/components/OutlookCompanionPanel.tsx`, `src/App.tsx` (헤더 `[Outlook 동반 검증]` 전환 · fallback 메일 즉시 검증 · `[Groq·Claude 정밀 분석]` 수동 호출 · 3종 회신 템플릿 + 초안 사전 점검 + `POST /api/local/outlook/send-via-com` `action: 'display'` 오리지널 Outlook 작성창 위임), `desktop/main.cjs` & `desktop/preload.cjs` (`bmail:setCompanionDock` 우측 사이드카 도킹 + 항상 위). E2E(`3475`, [bmail-v130-companion.png](file:///C:/Users/FREE/.gemini/antigravity/brain/ebe7d412-bd24-4d99-93e9-83579563c299/scratch/bmail-v130-companion.png))에서 `주의 검토 1건 (80점)` 및 `[오리지널 Outlook 작성창으로 열기]` 렌더링 실측 *(Electron 데스크톱 창 실도킹·COM 실작성창 오픈은 헤드리스/미실행으로 `[미검증]`)* |
+| **매뉴얼 Flash 동기화 · 검증 · 배포 (`1.3.0`)** | ✅ 실측 완료 | `AGENTS.md` 4항 준수 `Model: "flash"` 서브에이전트가 `manualCatalog.ts` (`1.3.0`, 32개 아이콘 `#1~#32`, 12개 모션 씬) & `InteractiveManualModal.tsx` 동기화 (`manualCatalog.test.ts` 1/1 PASS). `npm run lint` (`0`), `node --check` (`0`), Node `v24.20.0` 전체 36개 파일 **`152/152 PASS`** (`0` fail, `0` skipped). `release-exe/Bmail-Outlook-AI-Setup-1.3.0.exe` (`121,469,457` B, `sha256: e67a0829a42bb348a08e0356827e75710bd5b3b2fd1c049ee62de4c8267bc9ac`), R2 `latest.json`, Worker Version `62d70221-70b8-4511-846f-608511b7ec4b`, 무음 업그레이드 `NSIS_EXIT_CODE=0` (`installed 1.3.0`) |
+
+---
+
+## 0-0. 2026-11-25 v1.2.10 가로 구역 드래그 크기 조절 · 최근 14일 미확인 자동 알림 팝업 실측 현황
 
 | 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
 |---|---|---|

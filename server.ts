@@ -39,6 +39,11 @@ import {
   buildWindowsOutlookInspectorScript,
   parseWindowsOutlookProfileJson,
 } from './src/services/outlookLocalBridge';
+import {
+  readActiveOutlookItemAsync,
+  verifyOutlookItemSafety,
+  type OutlookCompanionPollResult,
+} from './src/services/outlookCompanionBridge';
 import { LocalMailDb } from './src/services/localMailDb';
 import {
   discoverAndApplyAllOutlookSettings,
@@ -2943,6 +2948,96 @@ Write-Output 'COM_OK'
     } catch (err) {
       const msg = err instanceof Error ? err.message : '대시보드 분석 리포트 생성 실패';
       res.status(500).json({ error: msg });
+    }
+  });
+
+  let activeCompanionPollInFlight: Promise<OutlookCompanionPollResult> | null = null;
+  let lastCompanionPollCache: { expiresAt: number; payload: OutlookCompanionPollResult } | null =
+    null;
+
+  app.get('/api/local/outlook/active-item', async (_req, res) => {
+    try {
+      const now = Date.now();
+      if (lastCompanionPollCache && lastCompanionPollCache.expiresAt > now) {
+        res.json(lastCompanionPollCache.payload);
+        return;
+      }
+      if (!activeCompanionPollInFlight) {
+        activeCompanionPollInFlight = readActiveOutlookItemAsync({ timeoutMs: 4500 })
+          .then((result) => {
+            lastCompanionPollCache = {
+              expiresAt: Date.now() + 1500,
+              payload: result,
+            };
+            return result;
+          })
+          .finally(() => {
+            activeCompanionPollInFlight = null;
+          });
+      }
+      const data = await activeCompanionPollInFlight;
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({
+        outlookRunning: false,
+        mode: 'idle',
+        item: null,
+        verification: null,
+        polledAt: new Date().toISOString(),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+
+  app.post('/api/local/outlook/verify-item', (req, res) => {
+    try {
+      const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<
+        string,
+        unknown
+      >;
+      const rawMode = String(body.mode || 'reading');
+      const mode =
+        rawMode === 'composing' ? 'composing' : rawMode === 'idle' ? 'idle' : 'reading';
+      const to = Array.isArray(body.to)
+        ? body.to.map(String)
+        : typeof body.to === 'string'
+          ? body.to.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+          : [];
+      const cc = Array.isArray(body.cc)
+        ? body.cc.map(String)
+        : typeof body.cc === 'string'
+          ? body.cc.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+          : [];
+      const bcc = Array.isArray(body.bcc)
+        ? body.bcc.map(String)
+        : typeof body.bcc === 'string'
+          ? body.bcc.split(/[;,]/).map((s) => s.trim()).filter(Boolean)
+          : [];
+      const attachmentNames = Array.isArray(body.attachmentNames)
+        ? body.attachmentNames.map(String)
+        : Array.isArray(body.attachments)
+          ? body.attachments.map(String)
+          : [];
+      const attachmentsCount = Number.isFinite(Number(body.attachmentsCount))
+        ? Number(body.attachmentsCount)
+        : attachmentNames.length;
+
+      const report = verifyOutlookItemSafety(
+        {
+          subject: String(body.subject || ''),
+          fromEmail: String(body.fromEmail || ''),
+          to,
+          cc,
+          bcc,
+          body: String(body.body || ''),
+          attachmentsCount,
+          attachmentNames,
+        },
+        mode
+      );
+      res.json(report);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 

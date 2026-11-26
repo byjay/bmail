@@ -39,4 +39,5 @@ contextBridge.exposeInMainWorld('bmailDesktop', {
   openSgwLoginWindow: (sgwBaseUrl) => ipcRenderer.invoke('bmail:openSgwLoginWindow', sgwBaseUrl),
   clearSgwAuthSession: (sgwBaseUrl) => ipcRenderer.invoke('bmail:clearSgwAuthSession', sgwBaseUrl),
   openComposeWindow: (draftKey) => ipcRenderer.invoke('bmail:openComposeWindow', draftKey),
+  setCompanionDock: (opts) => ipcRenderer.invoke('bmail:setCompanionDock', opts),
 });

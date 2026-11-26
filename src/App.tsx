@@ -23,6 +23,7 @@ import {
   Search,
   Settings,
   Shield,
+  ShieldCheck,
   Smartphone,
   Sparkles,
   StickyNote,
@@ -77,6 +78,9 @@ const OutlookSettingsModal = lazy(() =>
 );
 const OutlookComposeWindow = lazy(() =>
   import('./components/OutlookComposeWindow').then((m) => ({ default: m.OutlookComposeWindow }))
+);
+const OutlookCompanionPanel = lazy(() =>
+  import('./components/OutlookCompanionPanel').then((m) => ({ default: m.OutlookCompanionPanel }))
 );
 const OutlookTasksView = lazy(() =>
   import('./components/OutlookTasksView').then((m) => ({ default: m.OutlookTasksView }))
@@ -162,6 +166,7 @@ import { mergeInheritedProjects } from './utils/pstInheritance';
 
 type AppPage =
   | 'workbench'
+  | 'companion'
   | 'calendar'
   | 'people'
   | 'tasks'
@@ -3475,8 +3480,24 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: Interactive Motion Manual + Executive Dashboard + Uniform 36px Fluent 2 Suite Utility Buttons */}
+        {/* Right: Companion Mode + Interactive Motion Manual + Executive Dashboard + Uniform 36px Fluent 2 Suite Utility Buttons */}
         <div className="flex items-center gap-1 shrink-0 pr-0.5">
+          <button
+            type="button"
+            data-testid="btn-companion-mode"
+            onClick={() => setPage('companion')}
+            title="오리지널 클래식 Outlook 옆에 붙어서 실시간 메일 분석 · 발송 전 검증 · 초안 열기를 수행합니다"
+            aria-label="Outlook 동반 검증 모드 열기"
+            className={`inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] border text-white text-xs font-semibold transition-colors duration-150 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
+              page === 'companion'
+                ? 'bg-emerald-500/80 border-white/60 shadow-sm'
+                : 'bg-white/12 hover:bg-white/22 border-white/25'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
+            <span>Outlook 동반 검증</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setPage('dashboard')}
@@ -4053,6 +4074,14 @@ export default function App() {
                   initialTab="sgw-mail"
                   onOpenSgwChat={() => setIsSgwChatDrawerOpen(true)}
                   localTotalEmails={localTotalEmails}
+                />
+              )}
+
+              {page === 'companion' && (
+                <OutlookCompanionPanel
+                  fallbackEmail={emails.find((m) => !deletedIds.includes(m.id)) ?? null}
+                  onSwitchToWorkbench={() => setPage('workbench')}
+                  onSwitchToDashboard={() => setPage('dashboard')}
                 />
               )}
 
