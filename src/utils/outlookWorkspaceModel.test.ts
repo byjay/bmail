@@ -50,6 +50,12 @@ test('extractShipbuildingDrawingRefs detects hull, piping, electrical, and revis
   // Pure words without digits like MESSAGE / SUBJECT must never match as drawing refs
   assert.deepEqual(extractShipbuildingDrawingRefs('MESSAGE 확인 요청 · DRAFT STATUS'), []);
 
+  // Email usernames (e.g. elcon0955@naver.com) and URLs must never be mistaken for ELC drawing refs
+  assert.deepEqual(
+    extractShipbuildingDrawingRefs('발신: elcon0955@naver.com 참고 https://example.com/elc-999'),
+    []
+  );
+
   // Empty input safely returns empty list
   assert.deepEqual(extractShipbuildingDrawingRefs(''), []);
 });

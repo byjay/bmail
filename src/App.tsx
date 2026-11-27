@@ -409,7 +409,7 @@ export default function App() {
   const standaloneComposePopup = isComposePopupRoute();
   const standaloneTaskpane = isTaskpaneRoute();
   const sgwEmbedded = isSgwEmbeddedRoute();
-  const [page, setPage] = useState<AppPage>('workbench');
+  const [page, setPage] = useState<AppPage>('companion');
   const [requestedActiveEmailId, setRequestedActiveEmailId] = useState<string | null>(null);
   const [requestedToastReplyEmailId, setRequestedToastReplyEmailId] = useState<string | null>(null);
   const [isStickyNotesOpen, setIsStickyNotesOpen] = useState(false);
@@ -1071,14 +1071,19 @@ export default function App() {
   }, []);
 
   const handleSyncIncrementalOutlook = useCallback(
-    async (silent = false) => {
+    async (silent = false, opts?: { sendAndReceive?: boolean }) => {
       if (standaloneTaskpane || sgwEmbedded) return;
       setIsSyncingLiveOutlook(true);
       try {
-        const res = await fetch('/api/local/outlook/sync-incremental', { method: 'POST' });
+        const res = await fetch('/api/local/outlook/sync-incremental', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sendAndReceive: Boolean(opts?.sendAndReceive) }),
+        });
         if (res.ok) {
           const summary = (await res.json()) as {
             outlookRunning?: boolean;
+            sendReceiveTriggered?: boolean;
             addedPstEmails?: number;
             addedComEmails?: number;
             skippedUnchangedPsts?: number;
@@ -1103,8 +1108,11 @@ export default function App() {
             void notifyArrivedEmails(summary.newEmails);
           }
           if (!silent || added > 0) {
+            const syncTitle = summary.sendReceiveTriggered
+              ? 'Outlook 보내기/받기 · 증분 동기화 완료'
+              : 'Outlook 증분 동기화 완료';
             setGraphNotice(
-              `Outlook 증분 동기화 완료 · 신규 메일 +${added}건 반영 (기존 PST ${
+              `${syncTitle} · 신규 메일 +${added}건 반영 (기존 PST ${
                 summary.skippedUnchangedPsts || 0
               }개 유지 · 즐겨찾기 ${summary.favoritesCount || 0}개 · 총 ${(
                 summary.totalEmails || localTotalEmails
@@ -1121,15 +1129,15 @@ export default function App() {
     [standaloneTaskpane, sgwEmbedded, hydrateLocalBootstrap, localTotalEmails, notifyArrivedEmails]
   );
 
-  // Silent initial + continuous incremental Outlook sync so new Outlook COM emails accumulate seamlessly
+  // Immediate startup Send/Receive + incremental Outlook sync so new emails arrive right on launch
   useEffect(() => {
     if (!localDbAvailable || hasAutoIncrementalSyncedRef.current || standaloneTaskpane || sgwEmbedded) {
       return;
     }
     hasAutoIncrementalSyncedRef.current = true;
     const timer = window.setTimeout(() => {
-      void handleSyncIncrementalOutlook(true);
-    }, 8000);
+      void handleSyncIncrementalOutlook(true, { sendAndReceive: true });
+    }, 300);
     return () => window.clearTimeout(timer);
   }, [localDbAvailable, standaloneTaskpane, sgwEmbedded, handleSyncIncrementalOutlook]);
 
@@ -2851,19 +2859,19 @@ export default function App() {
       groupId: 'mail-ai',
       items: [
         {
+          id: 'companion',
+          label: 'Outlook 동반 검증',
+          icon: <ShieldCheck className="w-4 h-4" />,
+          active: page === 'companion',
+          onClick: () => setPage('companion'),
+        },
+        {
           id: 'workbench',
           label: '메일함',
           icon: <Mail className="w-4 h-4" />,
           active: page === 'workbench',
           badge: emails.length - deletedIds.length > 0 ? emails.length - deletedIds.length : undefined,
           onClick: () => setPage('workbench'),
-        },
-        {
-          id: 'ai-inbox',
-          label: 'AI 브리핑 · Ask AI',
-          icon: <Sparkles className="w-4 h-4" />,
-          active: page === 'ai-inbox',
-          onClick: () => setPage('ai-inbox'),
         },
       ],
     },
@@ -2913,27 +2921,11 @@ export default function App() {
       groupId: 'schedule-analytics',
       items: [
         {
-          id: 'calendar',
-          label: '일정 · 달력',
-          icon: <Calendar className="w-4 h-4" />,
-          active: page === 'calendar',
-          badge: allCalendarEvents.length > 0 ? allCalendarEvents.length : undefined,
-          onClick: () => setPage('calendar'),
-        },
-        {
           id: 'dashboard',
           label: '대시보드 · 일간브리핑',
           icon: <BarChart3 className="w-4 h-4" />,
           active: page === 'dashboard',
           onClick: () => setPage('dashboard'),
-        },
-        {
-          id: 'archive',
-          label: '기록함',
-          icon: <BookOpen className="w-4 h-4" />,
-          active: page === 'archive',
-          badge: archive.length > 0 ? archive.length : undefined,
-          onClick: () => setPage('archive'),
         },
       ],
     },
@@ -2948,6 +2940,18 @@ export default function App() {
     onClick: () => void;
   }> = [
     {
+      id: 'companion',
+      label: 'Outlook 동반 검증',
+      icon: (
+        <ShieldCheck
+          className="w-[18px] h-[18px]"
+          strokeWidth={page === 'companion' ? 2 : 1.65}
+        />
+      ),
+      active: page === 'companion',
+      onClick: () => setPage('companion'),
+    },
+    {
       id: 'workbench',
       label: '메일함 (Outlook)',
       icon: (
@@ -2961,17 +2965,29 @@ export default function App() {
       onClick: () => setPage('workbench'),
     },
     {
-      id: 'calendar',
-      label: '일정 · 달력',
+      id: 'dashboard',
+      label: '대시보드 · 일간브리핑',
       icon: (
-        <Calendar
+        <BarChart3
           className="w-[18px] h-[18px]"
-          strokeWidth={page === 'calendar' ? 2 : 1.65}
+          strokeWidth={page === 'dashboard' ? 2 : 1.65}
         />
       ),
-      active: page === 'calendar',
-      badge: allCalendarEvents.length > 0 ? allCalendarEvents.length : undefined,
-      onClick: () => setPage('calendar'),
+      active: page === 'dashboard',
+      onClick: () => setPage('dashboard'),
+    },
+    {
+      id: 'projects',
+      label: '프로젝트 · 파일정리',
+      icon: (
+        <Briefcase
+          className="w-[18px] h-[18px]"
+          strokeWidth={page === 'projects' ? 2 : 1.65}
+        />
+      ),
+      active: page === 'projects',
+      badge: projects.length > 0 ? projects.length : undefined,
+      onClick: () => setPage('projects'),
     },
     {
       id: 'people',
@@ -2988,46 +3004,6 @@ export default function App() {
           ? outlookPcProfile.contacts.length
           : undefined,
       onClick: () => setPage('people'),
-    },
-    {
-      id: 'tasks',
-      label: '할 일 · To-Do',
-      icon: (
-        <CheckSquare
-          className="w-[18px] h-[18px]"
-          strokeWidth={page === 'tasks' ? 2 : 1.65}
-        />
-      ),
-      active: page === 'tasks',
-      badge: outlookTasks.filter((t) => !t.completed).length > 0
-        ? outlookTasks.filter((t) => !t.completed).length
-        : undefined,
-      onClick: () => setPage('tasks'),
-    },
-    {
-      id: 'ai-inbox',
-      label: 'AI 브리핑 · Ask AI',
-      icon: (
-        <Sparkles
-          className="w-[18px] h-[18px]"
-          strokeWidth={page === 'ai-inbox' ? 2 : 1.65}
-        />
-      ),
-      active: page === 'ai-inbox',
-      onClick: () => setPage('ai-inbox'),
-    },
-    {
-      id: 'projects',
-      label: '프로젝트 · 파일정리',
-      icon: (
-        <Briefcase
-          className="w-[18px] h-[18px]"
-          strokeWidth={page === 'projects' ? 2 : 1.65}
-        />
-      ),
-      active: page === 'projects',
-      badge: projects.length > 0 ? projects.length : undefined,
-      onClick: () => setPage('projects'),
     },
     {
       id: 'voice',
@@ -3083,31 +3059,6 @@ export default function App() {
       ),
       active: page === 'sgw-sedms',
       onClick: () => setPage('sgw-sedms'),
-    },
-    {
-      id: 'dashboard',
-      label: '대시보드 · 일간브리핑',
-      icon: (
-        <BarChart3
-          className="w-[18px] h-[18px]"
-          strokeWidth={page === 'dashboard' ? 2 : 1.65}
-        />
-      ),
-      active: page === 'dashboard',
-      onClick: () => setPage('dashboard'),
-    },
-    {
-      id: 'archive',
-      label: '생성 일지 기록함',
-      icon: (
-        <BookOpen
-          className="w-[18px] h-[18px]"
-          strokeWidth={page === 'archive' ? 2 : 1.65}
-        />
-      ),
-      active: page === 'archive',
-      badge: archive.length > 0 ? archive.length : undefined,
-      onClick: () => setPage('archive'),
     },
   ];
 
@@ -3480,8 +3431,24 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right: Companion Mode + Interactive Motion Manual + Executive Dashboard + Uniform 36px Fluent 2 Suite Utility Buttons */}
+        {/* Right: Send/Receive + Companion Mode + Interactive Motion Manual + Executive Dashboard + Uniform 36px Fluent 2 Suite Utility Buttons */}
         <div className="flex items-center gap-1 shrink-0 pr-0.5">
+          <button
+            type="button"
+            data-testid="btn-send-receive-refresh"
+            disabled={isSyncingLiveOutlook}
+            onClick={() => void handleSyncIncrementalOutlook(false, { sendAndReceive: true })}
+            title="클래식 Outlook 보내기/받기를 실행하고 새로 도착한 메일을 즉시 가져옵니다"
+            aria-label="Outlook 보내기/받기 새로고침"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] border bg-white/15 hover:bg-white/25 active:bg-white/30 border-white/30 text-white text-xs font-semibold transition-colors duration-150 whitespace-nowrap disabled:opacity-65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+          >
+            <RefreshCw
+              className={`w-3.5 h-3.5 shrink-0 ${isSyncingLiveOutlook ? 'animate-spin' : ''}`}
+              strokeWidth={2}
+            />
+            <span>{isSyncingLiveOutlook ? '새 메일 확인 중...' : '보내기/받기'}</span>
+          </button>
+
           <button
             type="button"
             data-testid="btn-companion-mode"
@@ -3516,7 +3483,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setIsManualModalOpen(true)}
-            title="실제 화면 1:1 인터랙티브 HTML 매뉴얼 · 모션그래픽 동영상 가이드 (v1.2.1)"
+            title="실제 화면 1:1 인터랙티브 HTML 매뉴얼 · 모션그래픽 동영상 가이드 (v1.3.1)"
             aria-label="인터랙티브 매뉴얼 팝업 열기"
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-[4px] bg-white/15 hover:bg-white/25 active:bg-white/30 border border-white/25 text-white text-xs font-semibold transition-colors duration-150 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
           >
@@ -3587,18 +3554,6 @@ export default function App() {
                 {sgwUnreadCount > 99 ? '99+' : sgwUnreadCount}
               </span>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setPage('calendar')}
-            title="나의 하루 · 일정 달력 (.ics 내보내기/가져오기)"
-            aria-label="나의 하루 일정"
-            className={`w-9 h-9 flex items-center justify-center rounded-[4px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
-              page === 'calendar' ? 'bg-white/22' : 'hover:bg-white/15 active:bg-white/25'
-            }`}
-          >
-            <Calendar className="w-[17px] h-[17px] text-white" strokeWidth={1.75} />
           </button>
 
           <button
@@ -3790,39 +3745,6 @@ export default function App() {
             >
               <FolderOpen className="w-[17px] h-[17px]" strokeWidth={1.65} />
             </button>
-            <button
-              type="button"
-              onClick={() => setPage('install')}
-              title="Outlook 플러그인 · Windows 설치 센터"
-              aria-label="Outlook 플러그인 설치 센터"
-              aria-current={page === 'install' ? 'page' : undefined}
-              style={page === 'install' ? { color: accent.primary } : undefined}
-              className={`relative w-10 h-9 rounded-[4px] flex items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6CBD]/70 ${
-                page === 'install'
-                  ? 'bg-white/95 shadow-[0_1px_2px_rgba(0,0,0,0.06)]'
-                  : 'text-[#424242] hover:bg-black/[0.05] hover:text-[#0F6CBD] active:bg-black/[0.08]'
-              }`}
-            >
-              {page === 'install' && (
-                <span
-                  aria-hidden="true"
-                  style={{ backgroundColor: accent.primary }}
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[16px] rounded-full"
-                />
-              )}
-              <Puzzle
-                className="w-[17px] h-[17px]"
-                strokeWidth={page === 'install' ? 2 : 1.65}
-              />
-            </button>
-            <a
-              href="/manifest.xml?download=1"
-              title="Outlook manifest.xml 다운로드"
-              aria-label="manifest.xml 다운로드"
-              className="w-10 h-9 rounded-[4px] flex items-center justify-center text-[#424242] hover:bg-black/[0.05] hover:text-[#0F6CBD] active:bg-black/[0.08] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6CBD]/70"
-            >
-              <Download className="w-[17px] h-[17px]" strokeWidth={1.65} />
-            </a>
           </div>
         </nav>
 
@@ -4001,7 +3923,9 @@ export default function App() {
               localFolders={localFolders}
               outlookFavorites={outlookFavorites}
               isSyncingLiveOutlook={isSyncingLiveOutlook}
-              onSyncLiveOutlook={() => void handleSyncIncrementalOutlook(false)}
+              onSyncLiveOutlook={() =>
+                void handleSyncIncrementalOutlook(false, { sendAndReceive: true })
+              }
               onOpenManual={() => setIsManualModalOpen(true)}
               onOpenExecutiveDashboard={() => setPage('dashboard')}
               onAddCalendarEvent={handleAddManualEvent}
@@ -4082,6 +4006,11 @@ export default function App() {
                   fallbackEmail={emails.find((m) => !deletedIds.includes(m.id)) ?? null}
                   onSwitchToWorkbench={() => setPage('workbench')}
                   onSwitchToDashboard={() => setPage('dashboard')}
+                  onSendReceiveRefresh={() =>
+                    void handleSyncIncrementalOutlook(false, { sendAndReceive: true })
+                  }
+                  onOpenAiSettings={() => setPage('config')}
+                  isSyncingLiveOutlook={isSyncingLiveOutlook}
                 />
               )}
 
@@ -4106,7 +4035,9 @@ export default function App() {
                   onOpenMailInWorkbench={(emailId) => {
                     void handleOpenMailById(emailId);
                   }}
-                  onSyncIncrementalOutlook={() => handleSyncIncrementalOutlook(false)}
+                  onSyncIncrementalOutlook={() =>
+                    handleSyncIncrementalOutlook(false, { sendAndReceive: true })
+                  }
                   onSaveDraftToOutlook={(subject, body) => {
                     handleSaveDraft({ to: '', cc: '', subject, body, kind: 'worklog' });
                     setGraphNotice('Outlook 임시 보관함에 일간 업무 브리핑 초안을 저장했습니다.');

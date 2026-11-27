@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -30,11 +30,17 @@ export interface OutlookCompanionPanelProps {
   fallbackEmail?: MailItem | null;
   onSwitchToWorkbench: () => void;
   onSwitchToDashboard: () => void;
+  onSendReceiveRefresh?: () => void;
+  onOpenAiSettings?: () => void;
+  isSyncingLiveOutlook?: boolean;
 }
 
 interface AssistantAiResult {
   ok?: boolean;
+  model?: string;
   modelLabel?: string;
+  usedFallback?: boolean;
+  fallbackReason?: string;
   urgency?: string;
   summaryLines?: string[];
   actionChecklist?: string[];
@@ -44,6 +50,21 @@ interface AssistantAiResult {
     subject: string;
     body: string;
   }>;
+}
+
+function getCompanionEngineBadge(res: AssistantAiResult | null): { label: string; className: string } {
+  if (!res) return { label: '분석 대기', className: 'bg-slate-100 text-slate-600' };
+  const m = (res.model || '').toLowerCase();
+  if (res.usedFallback || m === 'deterministic-local') {
+    return { label: '오프라인 발췌', className: 'bg-amber-100 text-amber-900' };
+  }
+  if (m.includes('opus')) return { label: 'Claude Opus', className: 'bg-rose-100 text-rose-800' };
+  if (m.includes('sonnet')) return { label: 'Claude Sonnet', className: 'bg-purple-100 text-purple-800' };
+  if (m.includes('haiku')) return { label: 'Claude Haiku', className: 'bg-indigo-100 text-indigo-800' };
+  if (/gpt-oss|llama|groq|qwen|mixtral/i.test(m)) {
+    return { label: 'Groq AI', className: 'bg-emerald-100 text-emerald-800' };
+  }
+  return { label: 'AI 분석', className: 'bg-sky-100 text-[#0F6CBD]' };
 }
 
 function getBmailDesktopDock():
@@ -92,6 +113,9 @@ export const OutlookCompanionPanel: React.FC<OutlookCompanionPanelProps> = ({
   fallbackEmail,
   onSwitchToWorkbench,
   onSwitchToDashboard,
+  onSendReceiveRefresh,
+  onOpenAiSettings,
+  isSyncingLiveOutlook = false,
 }) => {
   const [pollResult, setPollResult] = useState<OutlookCompanionPollResult | null>(null);
   const [isPolling, setIsPolling] = useState(false);
@@ -101,6 +125,8 @@ export const OutlookCompanionPanel: React.FC<OutlookCompanionPanelProps> = ({
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiResult, setAiResult] = useState<AssistantAiResult | null>(null);
+  const aiCacheRef = useRef<Map<string, AssistantAiResult>>(new Map());
+  const aiAbortRef = useRef<AbortController | null>(null);
   const [replyTo, setReplyTo] = useState('');
   const [replySubject, setReplySubject] = useState('');
   const [replyBody, setReplyBody] = useState('');
@@ -226,49 +252,106 @@ export const OutlookCompanionPanel: React.FC<OutlookCompanionPanelProps> = ({
     }
   };
 
-  const handleRunDeepAi = async () => {
+  const handleRunDeepAi = useCallback(
+    async (
+      highPerformance = false,
+      itemOverride?: OutlookActiveItemSnapshot | null,
+      bypassCache = false
+    ) => {
+      const target = itemOverride || effectiveItem;
+      if (!target) return;
+      const cacheKey = `${target.entryId}:${target.subject}`;
+      if (!highPerformance && !bypassCache) {
+        const cached = aiCacheRef.current.get(cacheKey);
+        if (cached && !cached.usedFallback) {
+          setAiResult(cached);
+          setAiError(null);
+          return;
+        }
+      }
+      if (aiAbortRef.current) {
+        aiAbortRef.current.abort();
+      }
+      const ctrl = new AbortController();
+      aiAbortRef.current = ctrl;
+      setAiLoading(true);
+      setAiError(null);
+      try {
+        const res = await fetch('/api/local/mail/assistant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'analyze',
+            highPerformance,
+            email: {
+              id: target.entryId,
+              folder: target.sent ? 'sent' : 'inbox',
+              subject: target.subject,
+              fromName: target.fromName,
+              fromEmail: target.fromEmail,
+              to: target.to,
+              body: target.body,
+              attachments: target.attachments.map((name, i) => ({
+                id: `att-${i}`,
+                filename: name,
+                mimeType: 'application/octet-stream',
+                kind: 'other' as const,
+              })),
+            },
+          }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) {
+          const errBody = (await res.json().catch(() => ({}))) as { error?: string };
+          throw new Error(errBody.error || `HTTP ${res.status}`);
+        }
+        const data = (await res.json()) as AssistantAiResult;
+        if (!data.usedFallback) {
+          aiCacheRef.current.set(cacheKey, data);
+        }
+        setAiResult(data);
+        if (
+          Array.isArray(data.replyDrafts) &&
+          data.replyDrafts.length > 0 &&
+          effectiveMode !== 'composing'
+        ) {
+          setReplySubject(data.replyDrafts[0].subject);
+          setReplyBody(data.replyDrafts[0].body);
+        }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return;
+        }
+        setAiError(err instanceof Error ? err.message : 'AI 정밀 분석 중 오류가 발생했습니다.');
+      } finally {
+        if (aiAbortRef.current === ctrl) {
+          aiAbortRef.current = null;
+        }
+        setAiLoading(false);
+      }
+    },
+    [effectiveItem, effectiveMode]
+  );
+
+  // Automatically analyze active Outlook item with real Groq/Claude LLM
+  useEffect(() => {
     if (!effectiveItem) return;
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      const res = await fetch('/api/local/mail/assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'analyze',
-          email: {
-            id: effectiveItem.entryId,
-            folder: effectiveItem.sent ? 'sent' : 'inbox',
-            subject: effectiveItem.subject,
-            fromName: effectiveItem.fromName,
-            fromEmail: effectiveItem.fromEmail,
-            to: effectiveItem.to,
-            body: effectiveItem.body,
-            attachments: effectiveItem.attachments.map((name, i) => ({
-              id: `att-${i}`,
-              filename: name,
-              mimeType: 'application/octet-stream',
-              kind: 'other' as const,
-            })),
-          },
-        }),
-      });
-      if (!res.ok) {
-        const errBody = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(errBody.error || `HTTP ${res.status}`);
-      }
-      const data = (await res.json()) as AssistantAiResult;
-      setAiResult(data);
-      if (Array.isArray(data.replyDrafts) && data.replyDrafts.length > 0 && effectiveMode !== 'composing') {
-        setReplySubject(data.replyDrafts[0].subject);
-        setReplyBody(data.replyDrafts[0].body);
-      }
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : 'AI 정밀 분석 중 오류가 발생했습니다.');
-    } finally {
-      setAiLoading(false);
+    const cacheKey = `${effectiveItem.entryId}:${effectiveItem.subject}`;
+    const cached = aiCacheRef.current.get(cacheKey);
+    if (cached && !cached.usedFallback) {
+      setAiResult(cached);
+      return;
     }
-  };
+    const timer = window.setTimeout(() => {
+      void handleRunDeepAi(false, effectiveItem);
+    }, 350);
+    return () => {
+      window.clearTimeout(timer);
+      if (aiAbortRef.current) {
+        aiAbortRef.current.abort();
+      }
+    };
+  }, [effectiveItem?.entryId, effectiveItem?.subject, handleRunDeepAi]);
 
   const applyTemplateDraft = (kind: 'confirm' | 'schedule' | 'drawing') => {
     if (!effectiveItem) return;
@@ -361,6 +444,21 @@ export const OutlookCompanionPanel: React.FC<OutlookCompanionPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+          {onSendReceiveRefresh && (
+            <button
+              type="button"
+              data-testid="companion-send-receive-btn"
+              onClick={onSendReceiveRefresh}
+              disabled={isSyncingLiveOutlook}
+              title="클래식 Outlook 보내기/받기 실행 후 새 메일을 즉시 가져옵니다"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] border border-[#0F6CBD] bg-[#0F6CBD] hover:bg-[#115EA3] text-xs font-semibold text-white disabled:opacity-60"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 ${isSyncingLiveOutlook ? 'animate-spin' : ''}`}
+              />
+              <span>{isSyncingLiveOutlook ? '새 메일 확인 중...' : '보내기/받기'}</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void fetchActiveOutlookItem()}
@@ -586,28 +684,68 @@ export const OutlookCompanionPanel: React.FC<OutlookCompanionPanelProps> = ({
                 className="bg-white border border-[#E1DFDD] rounded-lg p-4 space-y-3"
               >
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#111827]">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#111827]">
                     <Sparkles className="w-4 h-4 text-[#0F6CBD]" />
                     <span>메일 AI 핵심 분석</span>
+                    {(() => {
+                      const badge = getCompanionEngineBadge(aiResult);
+                      return (
+                        <span
+                          data-testid="companion-ai-engine-badge"
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${badge.className}`}
+                        >
+                          {aiLoading ? 'AI 분석 중...' : badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
-                  <button
-                    type="button"
-                    disabled={aiLoading}
-                    onClick={() => void handleRunDeepAi()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[#0F6CBD] hover:bg-[#115EA3] text-white text-xs font-semibold disabled:opacity-60"
-                  >
-                    {aiLoading ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-3.5 h-3.5" />
-                    )}
-                    <span>{aiLoading ? 'AI 분석 중...' : 'Groq · Claude 정밀 분석'}</span>
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={aiLoading}
+                      onClick={() => void handleRunDeepAi(false, undefined, true)}
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[4px] border border-[#D1D1D1] bg-white hover:bg-[#F3F2F1] text-[#111827] text-xs font-semibold disabled:opacity-60"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${aiLoading ? 'animate-spin' : ''}`} />
+                      <span>다시 분석</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="companion-claude-deep-btn"
+                      disabled={aiLoading}
+                      onClick={() => void handleRunDeepAi(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] bg-[#0F6CBD] hover:bg-[#115EA3] text-white text-xs font-semibold disabled:opacity-60"
+                    >
+                      {aiLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      <span>{aiLoading ? 'AI 분석 중...' : 'Claude 정밀 재분석'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 {aiError && (
                   <div className="p-2.5 rounded border border-rose-200 bg-rose-50 text-xs text-rose-900">
                     {aiError}
+                  </div>
+                )}
+
+                {aiResult?.usedFallback && aiResult.fallbackReason && (
+                  <div className="p-2.5 rounded border border-amber-200 bg-amber-50 text-xs text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      <strong>오프라인 발췌 표시 중:</strong> {aiResult.fallbackReason}
+                    </span>
+                    {onOpenAiSettings && (
+                      <button
+                        type="button"
+                        onClick={onOpenAiSettings}
+                        className="px-2.5 py-1 rounded bg-white border border-amber-300 hover:bg-amber-100 text-[11px] font-bold text-amber-950"
+                      >
+                        Claude API 설정 열기
+                      </button>
+                    )}
                   </div>
                 )}
 

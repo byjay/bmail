@@ -427,18 +427,15 @@ export const OutlookComposeWindow: React.FC<OutlookComposeWindowProps> = ({
       .filter((n) => Number.isInteger(n) && n >= 0);
   };
 
-  const executeSendNow = async (comAction: 'send' | 'display' = 'send') => {
+  const executeSendNow = async (_requestedAction: 'send' | 'display' = 'display') => {
+    // Q2 Safe Companion Policy: Never transmit directly from Bmail; always open real Classic Outlook window (Display)
+    const comAction: 'display' = 'display';
     setCountdownLeft(null);
     setErrorMsg(null);
     setNotice(null);
     const htmlBody = editorRef.current?.innerHTML || '';
     const textBody = editorRef.current?.innerText || plainPreview || '';
     const cleanSubject = subject.trim() || '(제목 없음)';
-
-    if (comAction === 'send' && !to.trim() && !cc.trim() && !bcc.trim()) {
-      setErrorMsg('받는 사람 이메일 주소를 입력해 주세요.');
-      return;
-    }
 
     setIsSending(true);
     try {
@@ -448,28 +445,7 @@ export const OutlookComposeWindow: React.FC<OutlookComposeWindowProps> = ({
         contentBase64: a.contentBase64,
       }));
 
-      if (comAction === 'send' && pop3ConnectedEmail && onSendSmtp && keptForwardAtts.length === 0) {
-        const smtpRes = await onSendSmtp({
-          to: to.trim(),
-          cc: cc.trim(),
-          bcc: bcc.trim() || undefined,
-          subject: cleanSubject,
-          body: textBody,
-          htmlBody,
-          importance,
-          requestReadReceipt,
-          attachments: payloadAttachments.length > 0 ? payloadAttachments : undefined,
-        });
-        if (smtpRes.ok) {
-          setNotice(smtpRes.message);
-          window.setTimeout(() => onClose(), 1000);
-          return;
-        }
-        setErrorMsg(smtpRes.message);
-        return;
-      }
-
-      // Send or open directly via PC Outlook COM (preserves HTML business card, inline images, forwarded PST files & local files)
+      // Open directly in PC Classic Outlook via COM Display() so user verifies & sends in original Outlook
       const res = await fetch('/api/local/outlook/send-via-com', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -497,20 +473,15 @@ export const OutlookComposeWindow: React.FC<OutlookComposeWindowProps> = ({
       if (!res.ok || !data.ok) {
         setErrorMsg(
           data.error ||
-            'PC Outlook COM 발송에 실패했습니다. 임시 보관함에 저장하거나 POP3/SMTP 계정을 연결해 주세요.'
+            '오리지널 Outlook 작성창 열기에 실패했습니다. PC에 클래식 Outlook이 실행 중인지 확인하거나 임시 보관함에 저장해 주세요.'
         );
         return;
       }
       setNotice(
-        comAction === 'display'
-          ? `PC Outlook 새 메세지 창을 열었습니다 (명함 이미지 ${data.inlineImagesCount ?? 0}개 · 첨부 ${data.attachmentsCount ?? 0}개 포함).`
-          : `Outlook으로 HTML 메일을 즉시 발송했습니다 (명함 이미지 ${data.inlineImagesCount ?? 0}개 · 첨부 ${data.attachmentsCount ?? 0}개).`
+        `오리지널 Outlook 새 작성창을 열었습니다 (명함 이미지 ${data.inlineImagesCount ?? 0}개 · 첨부 ${data.attachmentsCount ?? 0}개 포함). Outlook에서 최종 확인 후 발송하세요.`
       );
-      if (comAction === 'send') {
-        window.setTimeout(() => onClose(), 1100);
-      }
     } catch {
-      setErrorMsg('메일 발송 중 통신 오류가 발생했습니다.');
+      setErrorMsg('오리지널 Outlook 작성창을 여는 중 통신 오류가 발생했습니다.');
     } finally {
       setIsSending(false);
     }
@@ -1136,10 +1107,11 @@ export const OutlookComposeWindow: React.FC<OutlookComposeWindowProps> = ({
           type="button"
           disabled={isSending || countdownLeft !== null}
           onClick={handleRequestSend}
-          className="w-[74px] shrink-0 rounded-[4px] border border-[#0F6CBD] bg-[#0F6CBD] hover:bg-[#115EA3] disabled:opacity-60 text-white flex flex-col items-center justify-center gap-1 text-xs font-bold shadow-xs transition-colors"
+          title="Bmail은 직접 발송하지 않고 오리지널 Outlook 새 작성창을 열어 안전하게 넘깁니다"
+          className="w-[82px] shrink-0 rounded-[4px] border border-[#0F6CBD] bg-[#0F6CBD] hover:bg-[#115EA3] disabled:opacity-60 text-white flex flex-col items-center justify-center gap-1 text-[11px] font-bold shadow-xs transition-colors"
         >
           <Send className="w-4 h-4" />
-          <span>{isSending ? '발송중' : countdownLeft !== null ? `${countdownLeft}s` : '보내기(S)'}</span>
+          <span>{isSending ? '여는 중' : countdownLeft !== null ? `${countdownLeft}s` : 'Outlook 열기'}</span>
         </button>
 
         <div className="flex-1 min-w-0 space-y-1.5 text-xs relative">

@@ -1742,16 +1742,16 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
                 <LogOut className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
             </div>
-          ) : (
+          ) : microsoftAuth.configured ? (
             <button
               type="button"
-              onClick={microsoftAuth.configured ? onConnectMicrosoft : onOpenInstallGuide}
+              onClick={onConnectMicrosoft}
               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-medium text-[#0F6CBD] hover:bg-[#EBF3FC] active:bg-[#DCEBFA] rounded-[4px] transition-colors duration-150 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6CBD]/60"
             >
               <CloudDownload className="w-3.5 h-3.5" strokeWidth={1.75} />
-              {microsoftAuth.configured ? 'Microsoft 365 연결' : '실제 Outlook 플러그인 설치'}
+              Microsoft 365 연결
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -4098,6 +4098,7 @@ export const OutlookWorkbench: React.FC<OutlookWorkbenchProps> = ({
                     })
                   }
                   onAddCalendarEvent={onAddCalendarEvent}
+                  onOpenAiSettings={onOpenConfigPage}
                   onClose={() => togglePinAiSplitDock(false)}
                 />
               </div>

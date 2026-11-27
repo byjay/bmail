@@ -117,6 +117,14 @@ import {
   DEFAULT_APP_CONFIG,
   sanitizeAppConfig,
 } from './src/utils/appConfig';
+import {
+  maskAnthropicApiKey,
+  parseAssistantJsonRobust,
+  sanitizeAnthropicError,
+  sanitizeClaudeModelOption,
+  upsertEnvKeyInText,
+  validateAnthropicApiKeyInput,
+} from './src/utils/localClaudeEnv';
 import { buildDeterministicWorkLog, exportEmailsToMbox, type ProjectDefinition } from './src/utils/deterministicAnalyzer';
 import { createIconPngBuffer } from './src/utils/iconPng';
 import {
@@ -160,7 +168,7 @@ if (explicitEnvPath && fs.existsSync(explicitEnvPath)) {
 }
 
 const PORT = Number(process.env.BMAIL_DESKTOP_PORT || process.env.PORT || 3000);
-const BIND_HOST = process.env.BMAIL_HOST?.trim() || '0.0.0.0';
+const BIND_HOST = process.env.BMAIL_HOST?.trim() || '127.0.0.1';
 const isProduction =
   process.env.NODE_ENV === 'production' ||
   (path.basename(__filename) === 'server.mjs' &&
@@ -477,9 +485,53 @@ async function startServer() {
   app.set('trust proxy', 1);
   app.use(express.json({ limit: '10mb' }));
 
-  // Allow Outlook Desktop WebView2 / OWA / SGW iframes and CORS manifest loading
+  const isAllowedLocalOrigin = (originHeader: string): boolean => {
+    const clean = originHeader.trim().toLowerCase();
+    if (!clean) return true;
+    if (
+      /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(clean) ||
+      clean === 'https://mail.seastar.work' ||
+      clean === 'https://bmail.seastar.work'
+    ) {
+      return true;
+    }
+    const extra = String(process.env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    return extra.includes(clean);
+  };
+
+  // Restrictive CORS & Loopback protection: lock /api/local/* and /api/admin/* to same-origin/loopback only
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const origin = String(req.headers.origin || '').trim();
+    const isSensitiveLocalApi =
+      req.path.startsWith('/api/local/') || req.path.startsWith('/api/admin/');
+
+    if (isSensitiveLocalApi) {
+      if (!isLoopbackRequest(req)) {
+        res.status(403).json({ error: '로컬/관리자 API는 PC 루프백(127.0.0.1)에서만 접근할 수 있습니다.' });
+        return;
+      }
+      if (origin && !isAllowedLocalOrigin(origin)) {
+        res.status(403).json({ error: '허용되지 않은 외부 Origin의 로컬 API 접근이 차단되었습니다.' });
+        return;
+      }
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Vary', 'Origin');
+      }
+    } else if (
+      req.path === '/manifest.xml' ||
+      req.path === '/manifest.json' ||
+      req.path.startsWith('/assets/')
+    ) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    } else if (origin && isAllowedLocalOrigin(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    }
+
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader(
       'Access-Control-Allow-Headers',
@@ -2587,10 +2639,16 @@ Write-Output 'COM_OK'
     const documents: ParsedDocumentSummary[] = [];
     const errors: Array<{ filename: string; error: string }> = [];
 
+    const FORBIDDEN_LOCAL_PATH_RE =
+      /(?:^|[\\/])(?:\.env(?:\.[^\\/]*)?|groq-keys\.txt|[^\\/]*\.enc\.json|[^\\/]*\.sqlite(?:-[a-z]+)?|[^\\/]*\.db|[^\\/]*\.(?:key|pem|pfx|p12))$|[\\/](?:windows|system32|syswow64|program files(?: \(x86\))?)[\\/]/i;
+
     for (const rawPath of rawPaths) {
       const resolved = path.resolve(rawPath.trim());
       const basename = path.basename(resolved) || resolved;
       try {
+        if (FORBIDDEN_LOCAL_PATH_RE.test(resolved)) {
+          throw new Error('보안 정책상 환경 설정·인증 키·DB·시스템 파일은 읽을 수 없습니다.');
+        }
         if (!fs.existsSync(resolved)) {
           throw new Error('파일을 찾을 수 없습니다.');
         }
@@ -2644,6 +2702,24 @@ Write-Output 'COM_OK'
       res.json({ key, value: localDb.getUserState(key) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : '로컬 상태 조회 실패';
+      res.status(400).json({ error: msg });
+    }
+  });
+
+  app.put('/api/local/state/:key', (req, res) => {
+    try {
+      const key = String(req.params.key || '').trim();
+      if (!localDb.isAllowedStateKey(key)) {
+        res.status(400).json({ error: `허용되지 않은 상태 키입니다: ${key}` });
+        return;
+      }
+      const body = (req.body && typeof req.body === 'object' ? req.body : {}) as {
+        value?: unknown;
+      };
+      localDb.setUserState(key, body.value);
+      res.json({ ok: true, key });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '로컬 상태 저장 실패';
       res.status(400).json({ error: msg });
     }
   });
@@ -2870,17 +2946,22 @@ Write-Output 'COM_OK'
   app.post('/api/local/outlook/discover-settings', handleDiscoverOutlookSettings);
 
   let incrementalSyncInFlight: Promise<Record<string, unknown>> | null = null;
-  app.post('/api/local/outlook/sync-incremental', async (_req, res) => {
+  app.post('/api/local/outlook/sync-incremental', async (req, res) => {
     if (!localDb.isReady()) {
       res.status(503).json({ error: localDb.getInitError() || '로컬 메일 DB가 준비되지 않았습니다.' });
       return;
     }
+    const reqBody = (req.body && typeof req.body === 'object' ? req.body : {}) as {
+      sendAndReceive?: boolean;
+    };
+    const triggerSendReceive = Boolean(reqBody.sendAndReceive);
     try {
       if (!incrementalSyncInFlight) {
         incrementalSyncInFlight = (async () => {
           const comRes = await pollLiveOutlookInboxAsync(localDb, {
-            maxItems: 25,
-            timeoutMs: 12_000,
+            maxItems: 30,
+            timeoutMs: triggerSendReceive ? 18_000 : 12_000,
+            triggerSendReceive,
           });
           const syncedAt = new Date().toISOString();
           const totalEmails = localDb.queryEmails({ limit: 1 }).total;
@@ -2890,6 +2971,7 @@ Write-Output 'COM_OK'
           return {
             ok: true,
             outlookRunning: comRes.outlookRunning,
+            sendReceiveTriggered: triggerSendReceive && comRes.outlookRunning,
             addedPstEmails: 0,
             addedComEmails: comRes.newEmails.length,
             skippedUnchangedPsts: 0,
@@ -3145,58 +3227,102 @@ Write-Output 'COM_OK'
     const isUrgent =
       mail.importance === 'high' || /긴급|urgent|asap|미결|금일|즉시/i.test(`${subject} ${textBody}`);
 
-    const buildOfflineAssistantResult = () => {
-      const summaryLines = [
-        `[${isUrgent ? '긴급·우선 검토' : '일반 업무'}] ${sender} 측에서 "${subject}" 관련 메일을 송부했습니다.`,
-        drawings.length > 0
-          ? `식별된 도면·문서 코드: ${drawings.join(', ')}`
-          : '식별된 도면 번호 없음 (일반 사양/업무 협의)',
-        deadlines.length > 0
-          ? `언급된 주요 일정·기한: ${deadlines.join(', ')}`
-          : '명시적 마감일 미검출 (본문 확인 권장)',
-      ];
-      const actionChecklist = [
-        '첨부 문서(POS / 도면 / 단가표) 개정 내역 및 사양 일치 여부 확인',
-        deadlines.length > 0
-          ? `기한(${deadlines[0]}) 내 검토 코멘트 및 승인 여부 회신`
-          : '담당 부서 검토 후 회신 일정 안내',
-      ];
+    const attachmentNames = Array.isArray(mail.attachments)
+      ? mail.attachments
+          .map((a) => (a && typeof a.filename === 'string' ? a.filename.trim() : ''))
+          .filter(Boolean)
+          .slice(0, 12)
+      : [];
+
+    const extractConcreteBodySentences = (rawText: string): string[] => {
+      const cleaned = rawText
+        .replace(/\r/g, '\n')
+        .split(/-----Original Message-----|From:\s|보낸 사람:\s|Sent:\s/i)[0] || rawText;
+      const lines = cleaned
+        .split(/\n+/)
+        .map((line) => line.replace(/\s+/g, ' ').trim())
+        .filter((line) => {
+          if (line.length < 10) return false;
+          if (/^(안녕하세요|수고하십니다|수고 많으십니다|감사합니다|수신|참조|발신|제목|best regards|regards|thanks|dear\s)/i.test(line)) {
+            return false;
+          }
+          if (/^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(line)) return false;
+          if (/^[-_=*]{3,}$/.test(line)) return false;
+          return true;
+        });
+      return Array.from(new Set(lines))
+        .slice(0, 3)
+        .map((line) => (line.length > 160 ? `${line.slice(0, 157)}...` : line));
+    };
+
+    const buildOfflineAssistantResult = (fallbackReason?: string) => {
+      const bodySentences = extractConcreteBodySentences(textBody);
+      const summaryLines =
+        bodySentences.length > 0
+          ? [
+              ...bodySentences,
+              ...(drawings.length > 0 ? [`도면·문서 코드: ${drawings.join(', ')}`] : []),
+              ...(deadlines.length > 0 ? [`언급된 일정·기한: ${deadlines.join(', ')}`] : []),
+            ].slice(0, 4)
+          : [
+              `본문 텍스트가 짧아 원문 확인이 필요합니다 (발신: ${sender}).`,
+              ...(drawings.length > 0 ? [`도면·문서 코드: ${drawings.join(', ')}`] : []),
+              ...(deadlines.length > 0 ? [`언급된 일정·기한: ${deadlines.join(', ')}`] : []),
+            ];
+
+      const actionChecklist: string[] = [];
+      if (drawings.length > 0) {
+        actionChecklist.push(`도면·문서(${drawings.slice(0, 3).join(', ')}) 최신 리비전 및 코멘트 반영 여부 점검`);
+      }
+      if (attachmentNames.length > 0) {
+        actionChecklist.push(`첨부 파일(${attachmentNames.slice(0, 3).join(', ')}) 내용 대조 확인`);
+      }
+      if (deadlines.length > 0) {
+        actionChecklist.push(`언급된 기한(${deadlines[0]}) 전 검토 결과 및 회신 일정 확정`);
+      }
+      if (actionChecklist.length === 0) {
+        actionChecklist.push(`${sender} 측 요청 사항 확인 및 담당자 회신 필요 여부 판단`);
+      }
+
       const replyDrafts = [
         {
           id: 'formal',
           toneLabel: '정중·공식 회신',
           subject: subject.startsWith('RE:') ? subject : `RE: ${subject}`,
-          body: `안녕하세요, ${sender}님.\n\n보내주신 "${subject}" 관련 메일 및 첨부 자료 잘 받았습니다.\n요청하신 사항을 내부 검토한 후 조속히 확정 회신드리겠습니다.\n\n감사합니다.`,
+          body: `안녕하세요, ${sender}님.\n\n보내주신 "${subject}" 메일 확인했습니다.\n${
+            bodySentences[0] ? `말씀하신 내용("${bodySentences[0].slice(0, 60)}") 검토 후 ` : '내부 검토 후 '
+          }조속히 확정 회신드리겠습니다.\n\n감사합니다.`,
         },
         {
           id: 'technical',
           toneLabel: '기술·도면 검토 회신',
           subject: subject.startsWith('RE:') ? subject : `RE: ${subject}`,
-          body: `안녕하세요, ${sender}님.\n\n송부해 주신 "${subject}"${drawings.length > 0 ? ` (${drawings.join(', ')})` : ''} 자료 접수하여 사양 및 개정 사항을 확인 중입니다.\n검토 완료 즉시 코멘트 반영하여 회신드리겠습니다.\n\n감사합니다.`,
+          body: `안녕하세요, ${sender}님.\n\n"${subject}"${drawings.length > 0 ? ` (${drawings.join(', ')})` : ''} 접수하여 사양 및 기술 사항을 검토 중입니다.\n확인 완료 즉시 코멘트 정리하여 회신드리겠습니다.\n\n감사합니다.`,
         },
         {
           id: 'concise',
           toneLabel: '간결·일정 조율 회신',
           subject: subject.startsWith('RE:') ? subject : `RE: ${subject}`,
-          body: `${sender}님, 안녕하세요.\n\n"${subject}" 건 확인했습니다. ${body.prompt ? `${body.prompt}\n` : '내부 확인 후 금주 내로 회신드리겠습니다.'}\n\n감사합니다.`,
+          body: `${sender}님, 안녕하세요.\n\n"${subject}" 건 확인했습니다. ${body.prompt ? `${body.prompt}\n` : deadlines[0] ? `${deadlines[0]} 일정 맞춰 회신드리겠습니다.` : '내부 확인 후 회신 일정 공유드리겠습니다.'}\n\n감사합니다.`,
         },
       ];
       const targetLang = body.targetLang || 'ko';
       const translatedText =
         targetLang === 'en'
-          ? `[English Summary & Translation]\nSubject: ${subject}\nFrom: ${sender}\n\n${textBody.slice(0, 1200) || '(No body)'}`
-          : `[한국어 요약·번역 해설]\n제목: ${subject}\n발신: ${sender}\n\n${summaryLines.join('\n')}\n\n--- 원문 발췌 ---\n${textBody.slice(0, 1200)}`;
+          ? `[English Summary]\nSubject: ${subject}\nFrom: ${sender}\n\n${textBody.slice(0, 1200) || '(No body)'}`
+          : `[한국어 원문 발췌]\n제목: ${subject}\n발신: ${sender}\n\n${summaryLines.join('\n')}\n\n--- 원문 ---\n${textBody.slice(0, 1200)}`;
       const chatAnswer = body.prompt
-        ? `"${subject}" 메일 기준으로 질문("${body.prompt}")을 검토했습니다.\n- 발신자: ${sender}\n- 핵심 요지: ${summaryLines[0]}\n-${drawings.length > 0 ? ` 관련 도면: ${drawings.join(', ')}` : ' 본문 첫 단락: ' + textBody.slice(0, 180)}`
+        ? `"${subject}" 메일 기준 오프라인 확인 결과("${body.prompt}"):\n- 발신자: ${sender}\n- 본문 요지: ${summaryLines[0]}${drawings.length > 0 ? `\n- 관련 도면: ${drawings.join(', ')}` : ''}`
         : summaryLines.join('\n');
 
       return {
         ok: true,
         mode,
         model: 'deterministic-local',
-        modelLabel: '로컬 결정론적 엔진 (무오류 오프라인 보장)',
+        modelLabel: '오프라인 본문 발췌 (AI 미연결)',
         tier: 'low',
         usedFallback: true,
+        fallbackReason: fallbackReason || undefined,
         urgency: isUrgent ? 'high' : 'normal',
         drawings,
         deadlines,
@@ -3208,28 +3334,69 @@ Write-Output 'COM_OK'
       };
     };
 
-    const fallbackPayload = buildOfflineAssistantResult();
-    const claudeApiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
+    const resolveActiveClaudeKey = (): { apiKey: string; source: 'env' | 'emv' | 'unconfigured' } => {
+      const fromEnv = (process.env.ANTHROPIC_API_KEY || '').trim();
+      if (fromEnv && !/^MY_ANTHROPIC/i.test(fromEnv)) {
+        return { apiKey: fromEnv, source: 'env' };
+      }
+      const fromEmv = (emvVault.resolveRuntimeEnv().ANTHROPIC_API_KEY || '').trim();
+      if (fromEmv && !/^MY_ANTHROPIC/i.test(fromEmv)) {
+        return { apiKey: fromEmv, source: 'emv' };
+      }
+      return { apiKey: '', source: 'unconfigured' };
+    };
+    const claudeApiKey = resolveActiveClaudeKey().apiKey;
     const groqConfigured = getGroqKeyPoolStatus().configuredCount > 0;
     if (!groqConfigured && !claudeApiKey) {
-      res.json(fallbackPayload);
+      res.json(
+        buildOfflineAssistantResult(
+          'Claude API 키가 설정되지 않았습니다. 상단 설정(⚙️ / 🛡️) → Claude API 설정에서 sk-ant-... 키를 입력하세요.'
+        )
+      );
       return;
     }
 
+    const llmErrors: string[] = [];
     try {
+      const configuredClaudeModel = sanitizeClaudeModelOption(process.env.ANTHROPIC_MODEL);
       const routingInput = {
         emailCount: 1,
         promptChars: subject.length + textBody.length + (body.prompt?.length || 0),
         customFocus: body.prompt || mode,
+        ...(configuredClaudeModel !== 'auto' ? { explicitModelOverride: configuredClaudeModel } : {}),
       };
-      const highPerformance = shouldEscalateToClaude({
-        highPerformance: Boolean(body.highPerformance),
-        routing: routingInput,
-        promptChars: routingInput.promptChars,
-      });
+      const llmLimits = getLlmUsageLimits();
+      const isUrgentClassApprovalMail =
+        isUrgent &&
+        /(선급|KR|DNV|ABS|LR|BV|승인\s*미결|클레임|계약\s*분쟁)/i.test(
+          `${subject} ${textBody.slice(0, 1200)}`
+        );
+      const explicitClaude = Boolean(body.highPerformance);
+      const autoEscalateClaude =
+        Boolean(claudeApiKey) &&
+        llmLimits.claudeAdvancedMode !== 'groq-only' &&
+        (llmLimits.claudeAdvancedMode === 'claude-only' ||
+          !groqConfigured ||
+          isUrgentClassApprovalMail ||
+          shouldEscalateToClaude({
+            highPerformance: false,
+            routing: routingInput,
+            promptChars: routingInput.promptChars,
+          }));
+      const preferClaudeFirst = Boolean(claudeApiKey) && (explicitClaude || autoEscalateClaude);
 
-      const systemPrompt =
-        '당신은 조선해양·설계·영업 Outlook AI 어시스턴트입니다. 반드시 순수 JSON 객체만 출력하세요. 키 규격: {"summaryLines":["..."],"actionChecklist":["..."],"replyDrafts":[{"id":"formal","toneLabel":"정중·공식 회신","subject":"...","body":"..."},{"id":"technical","toneLabel":"기술·도면 검토 회신","subject":"...","body":"..."},{"id":"concise","toneLabel":"간결·일정 조율 회신","subject":"...","body":"..."}],"translatedText":"...","chatAnswer":"..."}';
+      const systemPrompt = [
+        '당신은 조선해양·설계·영업·선급 승인 실무 전문 Outlook AI 분석가입니다.',
+        '반드시 유효한 순수 JSON 객체 1개만 출력하세요. 마크다운 코드블록(```)이나 부가 설명을 절대 붙이지 마세요.',
+        '문자열 값 안의 줄바꿈은 반드시 \\n 으로 이스케이프하세요.',
+        '규칙:',
+        '1) 메일 제목과 발신자를 단순 반복하는 상투적 문구("OO 측에서 XX 건을 송부했습니다", "첨부 문서(POS/도면/단가표) 개정 내역 확인")를 절대 금지합니다.',
+        '2) summaryLines는 3~4개 항목(각 120자 이내)으로, 메일 본문에 실제 적힌 핵심 요구사항·미결 이슈·호선/장비/도면·수치·마감일·리스크를 구체적인 한국어로 정리하세요.',
+        '3) actionChecklist는 2~4개 항목(각 100자 이내)으로, 이 메일 본문에 맞춰 수신자가 지금 바로 해야 할 구체적 실행 항목만 적으세요.',
+        '4) replyDrafts는 메일 본문의 구체적 항목을 반영한 3가지 톤(formal, technical, concise)의 간결하고 즉시 발송 가능한 실무 회신 초안(각 4~6줄 이내)을 작성하세요.',
+        '5) translatedText는 targetLang 기준 핵심 번역/요약(400자 이내), chatAnswer는 userQuestion이 있으면 본문 근거로 정확히 답변하세요(없으면 빈 문자열 "").',
+        'JSON 키 규격: {"summaryLines":["..."],"actionChecklist":["..."],"replyDrafts":[{"id":"formal","toneLabel":"정중·공식 회신","subject":"...","body":"..."},{"id":"technical","toneLabel":"기술·도면 검토 회신","subject":"...","body":"..."},{"id":"concise","toneLabel":"간결·일정 조율 회신","subject":"...","body":"..."}],"translatedText":"...","chatAnswer":"..."}',
+      ].join('\n');
       const userPrompt = JSON.stringify({
         mode,
         targetLang: body.targetLang || 'ko',
@@ -3240,19 +3407,20 @@ Write-Output 'COM_OK'
           subject,
           sender,
           date: mail.date || '',
+          attachments: attachmentNames,
           drawings,
           deadlines,
           body: textBody.slice(0, 4500),
         },
       });
 
-      let rawResponseText = '';
+      let parsed: Record<string, unknown> | null = null;
       let usedModelId = '';
       let usedModelLabel = '';
       let usedTier: 'low' | 'medium' | 'high' = 'medium';
 
-      // Default: Groq 5-key streaming pool first unless highPerformance requires Claude
-      if (!highPerformance && groqConfigured) {
+      const tryGroq = async () => {
+        if (!groqConfigured || parsed) return;
         try {
           const groqRes = await invokeGroqStreamingCompletion({
             systemPrompt,
@@ -3261,67 +3429,252 @@ Write-Output 'COM_OK'
             maxCompletionTokens: 2048,
             feature: 'mail-assistant',
           });
-          rawResponseText = groqRes.text;
-          usedModelId = groqRes.model;
-          usedModelLabel = `${groqRes.model} (5-키 순환 기본)`;
-          usedTier = 'medium';
-        } catch {
-          // Fail over to Claude below
+          const candidate = parseAssistantJsonRobust(groqRes.text);
+          if (candidate) {
+            parsed = candidate;
+            usedModelId = groqRes.model;
+            usedModelLabel = groqRes.model.includes('5-키')
+              ? groqRes.model
+              : `${groqRes.model} (5-키 풀)`;
+            usedTier = 'medium';
+          } else {
+            llmErrors.push('Groq: JSON 응답 파싱 실패');
+          }
+        } catch (err) {
+          llmErrors.push(`Groq: ${err instanceof Error ? err.message : String(err)}`);
         }
+      };
+
+      const tryClaude = async () => {
+        if (!claudeApiKey || parsed) return;
+        try {
+          const claudeRes = await invokeClaudeMessagesApi({
+            apiKey: claudeApiKey,
+            routing: routingInput,
+            systemPrompt,
+            userPrompt,
+            maxTokens: 3072,
+          });
+          const candidate = parseAssistantJsonRobust(claudeRes.text);
+          if (candidate) {
+            parsed = candidate;
+            usedModelId = claudeRes.model;
+            usedModelLabel = claudeRes.model;
+            usedTier = claudeRes.decision.tier;
+          } else {
+            llmErrors.push('Claude: JSON 응답 파싱 실패');
+          }
+        } catch (err) {
+          llmErrors.push(
+            `Claude: ${sanitizeAnthropicError(err instanceof Error ? err.message : String(err), claudeApiKey)}`
+          );
+        }
+      };
+
+      if (preferClaudeFirst) {
+        await tryClaude();
+        await tryGroq();
+      } else {
+        await tryGroq();
+        await tryClaude();
       }
 
-      if (!rawResponseText && claudeApiKey) {
-        const claudeRes = await invokeClaudeMessagesApi({
-          apiKey: claudeApiKey,
-          routing: routingInput,
-          systemPrompt,
-          userPrompt,
-          maxTokens: 2048,
-        });
-        rawResponseText = claudeRes.text;
-        usedModelId = claudeRes.model;
-        usedModelLabel = `Claude · ${claudeRes.model} (${claudeRes.decision.tierLabel})`;
-        usedTier = claudeRes.decision.tier;
-      }
-
-      if (!rawResponseText) {
-        res.json(fallbackPayload);
+      if (!parsed) {
+        res.json(
+          buildOfflineAssistantResult(
+            llmErrors.length > 0 ? llmErrors.join(' / ') : 'AI 응답이 비어 오프라인 발췌로 전환했습니다.'
+          )
+        );
         return;
       }
 
-      const jsonMatch = rawResponseText.match(/\{[\s\S]*\}/);
-      const parsed = jsonMatch ? (JSON.parse(jsonMatch[0]) as Record<string, unknown>) : {};
+      const fallbackPayload = buildOfflineAssistantResult();
+      const parsedObj = parsed as Record<string, unknown>;
+      const parsedSummary =
+        Array.isArray(parsedObj.summaryLines) && parsedObj.summaryLines.length > 0
+          ? parsedObj.summaryLines.map((s) => String(s || '').trim()).filter(Boolean)
+          : [];
+      const parsedActions =
+        Array.isArray(parsedObj.actionChecklist) && parsedObj.actionChecklist.length > 0
+          ? parsedObj.actionChecklist.map((s) => String(s || '').trim()).filter(Boolean)
+          : [];
 
       res.json({
         ...fallbackPayload,
         model: usedModelId,
         modelLabel: usedModelLabel,
         tier: usedTier,
-        usedFallback: false,
-        summaryLines:
-          Array.isArray(parsed.summaryLines) && parsed.summaryLines.length > 0
-            ? parsed.summaryLines.map(String)
-            : fallbackPayload.summaryLines,
-        actionChecklist:
-          Array.isArray(parsed.actionChecklist) && parsed.actionChecklist.length > 0
-            ? parsed.actionChecklist.map(String)
-            : fallbackPayload.actionChecklist,
+        usedFallback: parsedSummary.length === 0,
+        fallbackReason:
+          parsedSummary.length === 0
+            ? llmErrors.join(' / ') || 'AI 응답 구조가 비어 있어 본문 발췌로 대체했습니다.'
+            : undefined,
+        summaryLines: parsedSummary.length > 0 ? parsedSummary : fallbackPayload.summaryLines,
+        actionChecklist: parsedActions.length > 0 ? parsedActions : fallbackPayload.actionChecklist,
         replyDrafts:
-          Array.isArray(parsed.replyDrafts) && parsed.replyDrafts.length > 0
-            ? parsed.replyDrafts
+          Array.isArray(parsedObj.replyDrafts) && parsedObj.replyDrafts.length > 0
+            ? parsedObj.replyDrafts
             : fallbackPayload.replyDrafts,
         translatedText:
-          typeof parsed.translatedText === 'string' && parsed.translatedText.trim()
-            ? parsed.translatedText.trim()
+          typeof parsedObj.translatedText === 'string' && parsedObj.translatedText.trim()
+            ? parsedObj.translatedText.trim()
             : fallbackPayload.translatedText,
         chatAnswer:
-          typeof parsed.chatAnswer === 'string' && parsed.chatAnswer.trim()
-            ? parsed.chatAnswer.trim()
+          typeof parsedObj.chatAnswer === 'string' && parsedObj.chatAnswer.trim()
+            ? parsedObj.chatAnswer.trim()
             : fallbackPayload.chatAnswer,
       });
-    } catch {
-      // Never return 5xx or trigger Failed to fetch: gracefully serve deterministic result
-      res.json(fallbackPayload);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      res.json(buildOfflineAssistantResult([...llmErrors, reason].filter(Boolean).join(' / ')));
+    }
+  });
+
+  // --- Direct Local Claude API Settings & Live Connection Test (Loopback-Only, Zero Secret Leak) ---
+  const resolveWritableEnvPath = (): string => {
+    if (explicitEnvPath) return explicitEnvPath;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    return dataEnvPath;
+  };
+
+  const persistLocalEnvKey = (keyName: string, nextValue: string): void => {
+    const targetPath = resolveWritableEnvPath();
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    const existing = fs.existsSync(targetPath) ? fs.readFileSync(targetPath, 'utf8') : '';
+    const updated = upsertEnvKeyInText(existing, keyName, nextValue);
+    fs.writeFileSync(targetPath, updated, 'utf8');
+    if (nextValue.trim()) {
+      process.env[keyName] = nextValue.trim();
+    } else {
+      delete process.env[keyName];
+    }
+  };
+
+  const buildSafeClaudeConfigStatus = () => {
+    const fromEnv = (process.env.ANTHROPIC_API_KEY || '').trim();
+    const fromEmv = (emvVault.resolveRuntimeEnv().ANTHROPIC_API_KEY || '').trim();
+    const activeKey =
+      fromEnv && !/^MY_ANTHROPIC/i.test(fromEnv)
+        ? fromEnv
+        : fromEmv && !/^MY_ANTHROPIC/i.test(fromEmv)
+          ? fromEmv
+          : '';
+    const source: 'env' | 'emv' | 'unconfigured' =
+      fromEnv && !/^MY_ANTHROPIC/i.test(fromEnv)
+        ? 'env'
+        : fromEmv && !/^MY_ANTHROPIC/i.test(fromEmv)
+          ? 'emv'
+          : 'unconfigured';
+    return {
+      configured: Boolean(activeKey),
+      maskedPreview: maskAnthropicApiKey(activeKey),
+      source,
+      claudeModel: sanitizeClaudeModelOption(process.env.ANTHROPIC_MODEL),
+      routingMode: getLlmUsageLimits().claudeAdvancedMode,
+      groqConfiguredCount: getGroqKeyPoolStatus().configuredCount,
+    };
+  };
+
+  app.get('/api/local/ai/claude-config', (_req, res) => {
+    res.json(buildSafeClaudeConfigStatus());
+  });
+
+  app.put('/api/local/ai/claude-config', (req, res) => {
+    try {
+      const body = (req.body && typeof req.body === 'object' ? req.body : {}) as {
+        apiKey?: unknown;
+        clearApiKey?: unknown;
+        claudeModel?: unknown;
+        routingMode?: unknown;
+      };
+      let savedNewKey = false;
+      if (body.clearApiKey === true) {
+        persistLocalEnvKey('ANTHROPIC_API_KEY', '');
+      } else if (typeof body.apiKey === 'string' && body.apiKey.trim()) {
+        const check = validateAnthropicApiKeyInput(body.apiKey);
+        if (!check.ok) {
+          res.status(400).json({ error: check.error });
+          return;
+        }
+        persistLocalEnvKey('ANTHROPIC_API_KEY', check.value);
+        savedNewKey = true;
+      }
+
+      if (body.claudeModel !== undefined) {
+        const cleanModel = sanitizeClaudeModelOption(body.claudeModel);
+        persistLocalEnvKey('ANTHROPIC_MODEL', cleanModel === 'auto' ? '' : cleanModel);
+      }
+
+      if (
+        body.routingMode === 'claude-only' ||
+        body.routingMode === 'auto' ||
+        body.routingMode === 'groq-only'
+      ) {
+        saveLlmUsageLimits({ claudeAdvancedMode: body.routingMode });
+      } else if (savedNewKey) {
+        saveLlmUsageLimits({ claudeAdvancedMode: 'claude-only' });
+      }
+
+      res.json({ ok: true, ...buildSafeClaudeConfigStatus() });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Claude API 설정 저장 실패';
+      res.status(500).json({ error: sanitizeAnthropicError(msg) });
+    }
+  });
+
+  app.post('/api/local/ai/claude-test', async (req, res) => {
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as {
+      apiKey?: unknown;
+      claudeModel?: unknown;
+    };
+    const suppliedKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+    if (suppliedKey) {
+      const check = validateAnthropicApiKeyInput(suppliedKey);
+      if (!check.ok) {
+        res.status(400).json({ ok: false, error: check.error });
+        return;
+      }
+    }
+    const envKey = (process.env.ANTHROPIC_API_KEY || '').trim();
+    const emvKey = (emvVault.resolveRuntimeEnv().ANTHROPIC_API_KEY || '').trim();
+    const effectiveKey = suppliedKey || envKey || emvKey;
+    if (!effectiveKey) {
+      res.status(400).json({
+        ok: false,
+        error: '테스트할 Claude API 키가 설정되어 있지 않습니다. 먼저 sk-ant-... 키를 입력하세요.',
+      });
+      return;
+    }
+
+    const chosenModel = sanitizeClaudeModelOption(body.claudeModel ?? process.env.ANTHROPIC_MODEL);
+    const startedAt = Date.now();
+    try {
+      const result = await invokeClaudeMessagesApi({
+        apiKey: effectiveKey,
+        systemPrompt: 'Reply strictly with OK.',
+        userPrompt: 'ping',
+        maxTokens: 24,
+        timeoutMs: 15_000,
+        routing: {
+          emailCount: 1,
+          promptChars: 20,
+          ...(chosenModel !== 'auto' ? { explicitModelOverride: chosenModel } : {}),
+        },
+      });
+      res.json({
+        ok: true,
+        model: result.model,
+        latencyMs: Date.now() - startedAt,
+      });
+    } catch (err) {
+      res.status(400).json({
+        ok: false,
+        error: sanitizeAnthropicError(
+          err instanceof Error ? err.message : 'Claude API 연결 테스트 실패',
+          effectiveKey
+        ),
+        latencyMs: Date.now() - startedAt,
+      });
     }
   });
 

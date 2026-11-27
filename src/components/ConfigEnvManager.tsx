@@ -39,6 +39,7 @@ import {
 } from '../services/outlookLocalBridge';
 import { EmvVaultPanel } from './EmvVaultPanel';
 import { AdminLlmUsageCompactCard } from './AdminLlmUsageCompactCard';
+import { ClaudeApiSettingsCard } from './ClaudeApiSettingsCard';
 
 interface HybridCreditStatusView {
   realtimeGeminiCredit: {
@@ -381,6 +382,9 @@ export const ConfigEnvManager: React.FC<ConfigEnvManagerProps> = ({
             </a>
           </div>
         </header>
+
+        {/* Direct Claude API Key & Routing Mode Configuration */}
+        <ClaudeApiSettingsCard onUpdated={onVaultUpdated} />
 
         {/* Compact LLM Token & Cost Usage Monitor for Admin */}
         <AdminLlmUsageCompactCard />

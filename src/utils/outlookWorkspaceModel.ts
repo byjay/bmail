@@ -510,7 +510,10 @@ function classifyDiscipline(raw: string): ShipbuildingDrawingRef['discipline'] {
 }
 
 export function extractShipbuildingDrawingRefs(text: string): ShipbuildingDrawingRef[] {
-  const source = String(text || '');
+  const source = String(text || '')
+    // Strip email addresses and URLs so usernames like `elcon0955@naver.com` are never mistaken for ELC drawing codes
+    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ');
   if (!source.trim()) return [];
   const seen = new Set<string>();
   const refs: ShipbuildingDrawingRef[] = [];

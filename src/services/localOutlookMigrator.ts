@@ -1830,14 +1830,22 @@ interface RawAsyncInboxMessage {
  */
 export async function pollLiveOutlookInboxAsync(
   db: LocalMailDb,
-  options?: { maxItems?: number; timeoutMs?: number }
-): Promise<{ outlookRunning: boolean; newEmails: MailItem[]; error?: string }> {
+  options?: { maxItems?: number; timeoutMs?: number; triggerSendReceive?: boolean }
+): Promise<{ outlookRunning: boolean; newEmails: MailItem[]; sendReceiveTriggered?: boolean; error?: string }> {
   if (process.platform !== 'win32') {
     return { outlookRunning: false, newEmails: [] };
   }
 
   const maxItems = Math.max(5, Math.min(50, Math.round(options?.maxItems ?? 25)));
   const timeoutMs = Math.max(3000, Math.min(25_000, Math.round(options?.timeoutMs ?? 12_000)));
+  const sendReceiveBlock = options?.triggerSendReceive
+    ? `
+try {
+  $ns.SendAndReceive($false)
+  Start-Sleep -Milliseconds 1200
+} catch {}
+`
+    : '';
 
   const psScript = `
 $ErrorActionPreference = 'SilentlyContinue'
@@ -1859,6 +1867,7 @@ if ($null -eq $app) {
 }
 
 $ns = $app.GetNamespace("MAPI")
+${sendReceiveBlock}
 $messages = New-Object System.Collections.Generic.List[object]
 
 foreach ($store in $ns.Stores) {

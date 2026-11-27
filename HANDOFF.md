@@ -1,11 +1,23 @@
-# HANDOFF.md — Bmail v1.3.0 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
+# HANDOFF.md — Bmail v1.3.1 엔지니어링 인수인계서 (개발 전용 · 프로덕션 UI 비노출)
 
-> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.3.0`)
+> **대상 프로젝트**: Bmail — Outlook AI 워크스페이스 (`MailLog Studio for Outlook` · `v1.3.1`)
 > **보안 정책**: 프로덕션 사용자 UI에서 `[HANDOFF]` 및 `[전체 코드 다운로드]` 버튼은 제거되었으며, `/api/export/handoff` 엔드포인트 삭제(HTTP `404`), `/api/export/source-archive*`는 `BMAIL_DEV_EXPORT === 'true'` 개발 환경 전용으로 격리되었습니다(기본 HTTP `404`).
 
 ---
 
-## 0. 2026-11-26 v1.3.0 오리지널 Outlook 동반 분석·발송 전 검증 사이드카 모드 실측 현황
+## 0. 2026-11-27 v1.3.1 전체 `/grill-me` 감사 결함 전수 해결 · Claude API 직접 설정 · 실제 AI 자동 분석 · 보내기/받기 · 보안 강화 실측 현황
+
+| 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
+|---|---|---|
+| **Claude API 직접 설정 & 즉시 연결 테스트 (Groq 미연동 대응)** | ✅ 실측 완료 | `src/utils/localClaudeEnv.ts` & `src/utils/localClaudeEnv.test.ts` (4/4 PASS: 마스킹·키 유효성 검증·`.env` 안전 업서트·줄바꿈 포함 JSON 복구 파서 `parseAssistantJsonRobust`), `server.ts` (`GET/PUT /api/local/ai/claude-config`, `POST /api/local/ai/claude-test`, `resolveActiveClaudeKey` `.env`+EMV 통합 조회, 새 키 저장 시 `claude-only` 기본 전환), `src/components/ClaudeApiSettingsCard.tsx`, `src/components/ConfigEnvManager.tsx`(상단 배치), `src/components/OutlookSettingsModal.tsx`(`AI · Claude API` 1번 탭), `MailAiDockPanel.tsx`/`OutlookCompanionPanel.tsx`(오프라인 배너 `[Claude API 설정 열기]` 원클릭). 실서버(`3476`) 실측: `GET /api/local/ai/claude-config` HTTP `200`(`configured: true`, `maskedPreview: sk-ant-••••••BgAA`, `noRawKeyLeaked: true`), `POST /api/local/ai/claude-test` HTTP `200`(`liveTestOk: true`, `claude-haiku-5-5`, **`790ms`**), 1440px `ego-browser` [bmail-v131-claude-settings-1440.png](file:///C:/Users/FREE/.gemini/antigravity/brain/ebe7d412-bd24-4d99-93e9-83579563c299/scratch/bmail-v131-claude-settings-1440.png) 확인 *(디스크 `.env` 쓰기/삭제 왕복은 운영 키 보호를 위해 단위 테스트로 검증)* |
+| **실제 LLM 본문 분석 복구 · 오탐/중복 접두사/JSON 파싱 해결** | ✅ 실측 완료 | `src/utils/outlookWorkspaceModel.ts` & `.test.ts` (이메일 주소·URL 사전 제거로 `elcon0955@naver.com` 도면번호 오탐 차단), `server.ts` (`POST /api/local/mail/assistant` 상투적 템플릿 제거·본문 근거 프롬프트·`parseAssistantJsonRobust`·Claude `maxTokens: 3072`·Groq/Claude 상호 폴백·중복 모델 접두사 제거), `MailAiDockPanel.tsx` (`autoAiOnSelect` 기본 `true`·슬림 페이로드·`Groq AI`/`Claude` 정확한 배지·`[Claude 정밀]` 버튼·`fallbackReason` 투명 고지), `OutlookCompanionPanel.tsx` (자동 AI 분석·`[다시 분석]` 캐시 우회·`[Claude 정밀 재분석]`). 실서버(`3476`) 실측: 일반 합성 메일 **`usedFallback: false`**(`Groq · openai/gpt-oss-120b (#1) (5-키 풀)`, `3532ms`, `drawings: []` 오탐 0건), 긴급 선급 합성 메일 **`usedFallback: false`**(`Claude · claude-haiku-5-5`, `5622ms`), 1440px `ego-browser` [bmail-v131-real-ai-dock-1440.png](file:///C:/Users/FREE/.gemini/antigravity/brain/ebe7d412-bd24-4d99-93e9-83579563c299/scratch/bmail-v131-real-ai-dock-1440.png)에서 우측 AI 도크 `Groq AI` 배지 + 실제 본문 요약·체크리스트 확인 |
+| **기본 홈 동반 검증 전환 · 안전 발송 위임 · 보내기/받기 · 5개 메뉴 정리** | ✅ 실측 완료 | `src/App.tsx` (기본 페이지 `'companion'`, 시작 `300ms` 즉시 `sendAndReceive: true` 동기화, 헤더 `[보내기/받기]` `btn-send-receive-refresh`, `calendar`/`tasks`/`archive`/`ai-inbox`/`install` 네비 UI 숨김·소스 보존), `src/components/OutlookComposeWindow.tsx` (직접 SMTP/COM `.Send()` 제거 → 항상 `MailItem.Display()` 오리지널 Outlook 작성창 위임, 버튼 `Outlook 열기`), `src/components/OutlookWorkbench.tsx` (`실제 Outlook 플러그인 설치` 배너 숨김), `src/services/localOutlookMigrator.ts` (`triggerSendReceive` `$ns.SendAndReceive($false)`). 실서버(`3476`) `POST /api/local/outlook/sync-incremental` HTTP `200`, 1440px `ego-browser` [bmail-v131-companion-home-1440.png](file:///C:/Users/FREE/.gemini/antigravity/brain/ebe7d412-bd24-4d99-93e9-83579563c299/scratch/bmail-v131-companion-home-1440.png)에서 기본 홈·`leakedHiddenMenus: []`·`hasPluginInstallBannerText: false` 실측 *(클래식 Outlook 미실행 환경으로 COM 실제 창 팝업 및 `$ns.SendAndReceive` 실행은 `[미검증]`)* |
+| **로컬 서버 보안 잠금 · SQLite state 404 3종 복구** | ✅ 실측 완료 | `server.ts` (`BIND_HOST` 기본 `'127.0.0.1'`, `/api/local/*`·`/api/admin/*` 루프백+Origin 검증, `/api/local/files/parse-paths` `.env`/`groq-keys.txt`/`*.sqlite*`/시스템 경로 차단, `PUT /api/local/state/:key` 추가). 실서버(`3476`) 실측: 외부 `Origin: https://evil.example` → `/api/local/bootstrap` **`403`** · `/api/local/ai/claude-config` **`403`**, `.env` 읽기 요청 **`400`** 차단, `PUT /api/local/state/outlookPrefs`·`mail_action_states`·`mail_chat_histories` 3종 모두 HTTP **`200 { ok: true }`** |
+| **매뉴얼 Flash 동기화 · 검증 · 배포 (`1.3.1`) · Jev 게이트 상태** | ✅ 실측 완료 *(Jev 외부 호출 `[미검증]`)* | `Model: "flash"` 서브에이전트가 `manualCatalog.ts` (`1.3.1`, 35개 아이콘 `#1~#35`, 13개 모션 씬) & `InteractiveManualModal.tsx` 동기화 (`manualCatalog.test.ts` 1/1 PASS). `npm run lint` (`0`), `node --check` (`0`), Node `v24.20.0` 전체 37개 파일 **`156/156 PASS`** (`0` fail, `0` skipped). `release-exe/Bmail-Outlook-AI-Setup-1.3.1.exe` (`121,479,318` B, `sha256: E28A0FC98161E20E78AF3B7F54DA0902D1C73BC458726F472B57209CBD1705C3`), R2 `latest.json`, Worker Version `e0b76e32-fcf0-41b4-b4d3-d3e081fc444d` (`https://mail.seastar.work/api/health` `1.3.1`), 무음 설치 `/S` (`installed 1.3.1`), `PORT_3476_LISTEN=False`. Jev 외부 API 게이트는 PC 환경변수·`.env`에 `TYPESAFE_API_KEY`/`OPENROUTER_API_KEY` 미설정(`hasTypesafeKey=false`, `hasOpenRouterKey=false`)으로 `[미검증]` |
+
+---
+
+## 0-0. 2026-11-26 v1.3.0 오리지널 Outlook 동반 분석·발송 전 검증 사이드카 모드 실측 현황
 
 | 영역 | 실측 상태 | 세부 실측 내역 및 경로 |
 |---|---|---|

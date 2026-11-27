@@ -142,17 +142,19 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
       ? currentScene.previewState
       : activeIcon.id === 'icon-header-outlook-companion'
         ? 'outlook-companion'
-        : activeIcon.zone === 'dashboard'
-          ? 'executive-dashboard'
-          : activeIcon.zone === 'sgw-chat'
-            ? 'sgw-login-chat'
-            : activeIcon.zone === 'attach-dock' && activeIcon.id.includes('batch')
-              ? 'batch-folder-export'
-              : activeIcon.zone === 'attach-dock'
-                ? 'attach-preview'
-                : activeIcon.zone === 'ai-dock'
-                  ? 'ai-dock-reply'
-                  : 'outlook-overview';
+        : activeIcon.id === 'icon-header-send-receive'
+          ? 'live-sync'
+          : activeIcon.zone === 'dashboard'
+            ? 'executive-dashboard'
+            : activeIcon.zone === 'sgw-chat'
+              ? 'sgw-login-chat'
+              : activeIcon.zone === 'attach-dock' && activeIcon.id.includes('batch')
+                ? 'batch-folder-export'
+                : activeIcon.zone === 'attach-dock'
+                  ? 'attach-preview'
+                  : activeIcon.zone === 'ai-dock'
+                    ? 'ai-dock-reply'
+                    : 'outlook-overview';
 
   const handleOpenStandaloneHtmlPopup = () => {
     window.open(
@@ -386,7 +388,17 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                     <Search className="w-3 h-3 text-[#0F6CBD]" />
                     <span>검색 (제목, 보낸 사람, 22K FD, 도면·본문)</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`px-2 py-0.5 rounded font-bold text-[10px] flex items-center gap-1 ${
+                        previewState === 'live-sync'
+                          ? 'bg-emerald-400 text-slate-950 animate-pulse'
+                          : 'bg-white/20 text-white'
+                      }`}
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      보내기/받기
+                    </span>
                     <span className="px-2 py-0.5 rounded bg-amber-400 text-slate-950 font-bold text-[10px]">
                       Outlook 동반 검증
                     </span>
@@ -395,7 +407,6 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                     </span>
                     <span>POP3</span>
                     <span>SGW채팅</span>
-                    <span>일정</span>
                     <Settings className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -468,10 +479,26 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                     <div className="w-[38%] bg-[#FAF9F8] border-2 border-[#0F6CBD] rounded flex flex-col justify-between p-2.5 text-[10px] shrink-0">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between border-b border-slate-200 pb-1.5">
-                          <span className="font-bold text-[#0F6CBD]">Outlook 동반 검증 사이드카</span>
-                          <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[9px]">
-                            우측 도킹 · 항상 위
-                          </span>
+                          <span className="font-bold text-[#0F6CBD]">Outlook 동반 검증 (기본 시작)</span>
+                          <div className="flex items-center gap-1">
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-[9px]">
+                              보내기/받기 (300ms)
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 border border-amber-300 font-bold text-[9px]">
+                              우측 도킹 · 항상 위
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between px-1.5 py-1 rounded bg-purple-50 border border-purple-200 text-[9px] gap-1">
+                          <span className="font-bold text-purple-900 truncate">엔진: Groq AI / Claude 5.5</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-white font-semibold">
+                              Claude API 설정 열기
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-purple-600 text-white font-bold">
+                              Claude 정밀 재분석
+                            </span>
+                          </div>
                         </div>
                         <div className="space-y-1">
                           <div className="p-1.5 rounded bg-rose-50 border border-rose-200 text-rose-800 font-semibold">
@@ -488,10 +515,10 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
 
                       <div className="space-y-1.5 pt-2 border-t border-slate-200">
                         <div className="px-2 py-1.5 rounded bg-[#0F6CBD] text-white text-center font-bold">
-                          MailItem.Display()로 오리지널 Outlook 작성창 열기
+                          MailItem.Display() 오리지널 Outlook 작성창 안전 위임
                         </div>
                         <div className="text-[9px] text-slate-500 text-center">
-                          verify-item · send-via-com (action: display) · bmail:setCompanionDock
+                          verify-item · send-via-com (display) · bmail:setCompanionDock
                         </div>
                       </div>
                     </div>
@@ -791,13 +818,18 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                     {/* Col 4 (Split 1): AI Analysis & Reply Dock (18%) */}
                     <div className="w-[18%] bg-[#FAF9F8] border-r border-[#E0E0E0] p-2 flex flex-col justify-between text-[10px] shrink-0">
                       <div className="space-y-2">
-                        <div className="flex items-center justify-between border-b pb-1">
-                          <span className="font-bold text-purple-700 flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" /> AI 분석 · 0ms
+                        <div className="flex items-center justify-between border-b pb-1 gap-1">
+                          <span className="font-bold text-purple-700 flex items-center gap-1 truncate">
+                            <Sparkles className="w-3 h-3 shrink-0" /> AI 분석 · Groq AI
                           </span>
-                          <span className="px-1.5 py-0.5 bg-slate-100 border border-[#D2D0CE] text-slate-700 text-[9px] font-bold">
-                            자동 / 수동
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className="px-1 py-0.5 bg-purple-600 text-white text-[8px] font-bold rounded">
+                              Claude 정밀
+                            </span>
+                            <span className="px-1 py-0.5 bg-slate-100 border border-[#D2D0CE] text-slate-700 text-[8px] font-bold">
+                              자동/수동
+                            </span>
+                          </div>
                         </div>
                         <div className="grid grid-cols-5 gap-0.5 bg-slate-200 p-0.5 rounded text-[9px] font-semibold text-center">
                           <span className={previewState !== 'ai-dock-reply' ? 'bg-white rounded py-0.5 text-purple-700' : 'py-0.5'}>분석</span>
@@ -816,7 +848,7 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                               </p>
                             </div>
                             <div className="px-2 py-1 rounded bg-purple-600 text-white text-center font-semibold">
-                              회신 창에 바로 삽입
+                              MailItem.Display() 원창 열기
                             </div>
                           </div>
                         ) : (
@@ -829,12 +861,12 @@ export const InteractiveManualModal: React.FC<InteractiveManualModalProps> = ({
                             </div>
                             <div className="p-1.5 rounded bg-white border">
                               <div className="font-bold text-slate-800">식별된 도면 · 기한</div>
-                              <p className="text-[#0F6CBD] font-mono">H042 · KYTS-1037 (오탐 0건)</p>
+                              <p className="text-[#0F6CBD] font-mono">H042 · KYTS-1037 (이메일 오탐 0건)</p>
                             </div>
                           </div>
                         )}
                       </div>
-                      <div className="text-[9px] text-slate-500">Claude 5.5 3단계 자동 라우팅</div>
+                      <div className="text-[9px] text-slate-500">Claude API 설정 열기 · Groq 5-키 · Claude 5.5</div>
                     </div>
 
                     {/* Col 5 (Split 2): Attachment Preview & Folder Batch Exporter Dock (18%) */}

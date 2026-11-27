@@ -52,6 +52,7 @@ export interface MailAiDockPanelProps {
   email: MailItem | null;
   onInsertReplyDraft?: (draft: { to: string; subject: string; body: string }) => void;
   onAddCalendarEvent?: (ev: Omit<CalendarScheduleEvent, 'id'>) => void;
+  onOpenAiSettings?: () => void;
   onClose?: () => void;
 }
 
@@ -67,6 +68,7 @@ interface AssistantPayload {
   modelLabel: string;
   tier: string;
   usedFallback: boolean;
+  fallbackReason?: string;
   urgency: 'high' | 'normal';
   drawings: string[];
   deadlines: string[];
@@ -77,10 +79,50 @@ interface AssistantPayload {
   chatAnswer: string;
 }
 
+function extractBodyPreviewLines(rawBody: string): string[] {
+  const head = rawBody
+    .replace(/\r/g, '\n')
+    .split(/-----Original Message-----|From:\s|보낸 사람:\s|Sent:\s/i)[0] || rawBody;
+  const lines = head
+    .split(/\n+/)
+    .map((l) => l.replace(/\s+/g, ' ').trim())
+    .filter(
+      (l) =>
+        l.length >= 10 &&
+        !/^(안녕하세요|수고하십니다|감사합니다|수신|참조|발신|제목|best regards|regards|thanks|dear\s)/i.test(l) &&
+        !/^[\w.+-]+@[\w.-]+\.[a-z]{2,}$/i.test(l) &&
+        !/^[-_=*]{3,}$/.test(l)
+    );
+  return Array.from(new Set(lines))
+    .slice(0, 3)
+    .map((l) => (l.length > 140 ? `${l.slice(0, 137)}...` : l));
+}
+
+function resolveAiEngineBadge(payload: AssistantPayload): { label: string; className: string } {
+  const model = (payload.model || '').toLowerCase();
+  if (payload.usedFallback || model === 'deterministic-local') {
+    return { label: '오프라인', className: 'bg-slate-200 text-slate-700' };
+  }
+  if (model.includes('opus')) {
+    return { label: 'Claude Opus', className: 'bg-rose-100 text-rose-800' };
+  }
+  if (model.includes('sonnet')) {
+    return { label: 'Claude Sonnet', className: 'bg-purple-100 text-purple-800' };
+  }
+  if (model.includes('haiku')) {
+    return { label: 'Claude Haiku', className: 'bg-indigo-100 text-indigo-800' };
+  }
+  if (/gpt-oss|llama|groq|qwen|mixtral/i.test(model)) {
+    return { label: 'Groq AI', className: 'bg-emerald-100 text-emerald-800' };
+  }
+  return { label: 'AI 분석', className: 'bg-sky-100 text-[#0F6CBD]' };
+}
+
 function buildClientFallbackPayload(
   email: MailItem,
   customPrompt?: string,
-  targetLang = 'ko'
+  targetLang = 'ko',
+  fallbackReason?: string
 ): AssistantPayload {
   const subject = email.subject || '(제목 없음)';
   const sender = email.fromName || email.fromEmail || '발신자';
@@ -96,23 +138,35 @@ function buildClientFallbackPayload(
   ).slice(0, 4);
   const isUrgent =
     email.importance === 'high' || /긴급|urgent|asap|미결|금일|즉시/i.test(`${subject} ${body}`);
+  const previewLines = extractBodyPreviewLines(body);
+  const attNames = (email.attachments || []).map((a) => a.filename).filter(Boolean);
 
-  const summaryLines = [
-    `[${isUrgent ? '긴급·우선 검토' : '일반 업무'}] ${sender} 측에서 "${subject}" 건을 발송했습니다.`,
-    drawings.length > 0
-      ? `식별된 도면·문서 코드: ${drawings.join(', ')}`
-      : '식별된 도면 코드 없음 (사양/업무 협의)',
-    deadlines.length > 0
-      ? `언급된 기한·일정: ${deadlines.join(', ')}`
-      : '명시적 마감 기한 미검출',
-  ];
+  const summaryLines =
+    previewLines.length > 0
+      ? [
+          ...previewLines,
+          ...(drawings.length > 0 ? [`도면·문서 코드: ${drawings.join(', ')}`] : []),
+          ...(deadlines.length > 0 ? [`언급된 기한: ${deadlines.join(', ')}`] : []),
+        ].slice(0, 4)
+      : [
+          `본문 요약 대기 중 (${sender} · "${subject}")`,
+          ...(drawings.length > 0 ? [`도면·문서 코드: ${drawings.join(', ')}`] : []),
+          ...(deadlines.length > 0 ? [`언급된 기한: ${deadlines.join(', ')}`] : []),
+        ];
 
-  const actionChecklist = [
-    '첨부 문서(POS / 도면 / 단가표) 개정 내역 및 기술 사양 일치 여부 확인',
-    deadlines.length > 0
-      ? `기한(${deadlines[0]}) 내 검토 코멘트 및 승인 여부 회신`
-      : '담당 파트 검토 후 회신 일정 안내',
-  ];
+  const actionChecklist: string[] = [];
+  if (drawings.length > 0) {
+    actionChecklist.push(`도면·문서(${drawings.slice(0, 3).join(', ')}) 리비전 및 검토 상태 확인`);
+  }
+  if (attNames.length > 0) {
+    actionChecklist.push(`첨부 파일(${attNames.slice(0, 3).join(', ')}) 내용 대조`);
+  }
+  if (deadlines.length > 0) {
+    actionChecklist.push(`기한(${deadlines[0]}) 내 검토 결과 회신`);
+  }
+  if (actionChecklist.length === 0) {
+    actionChecklist.push(`${sender} 측 요청 내용 확인 및 회신 여부 결정`);
+  }
 
   const reSubject = subject.startsWith('RE:') ? subject : `RE: ${subject}`;
   const replyDrafts: AssistantReplyDraft[] = [
@@ -120,7 +174,7 @@ function buildClientFallbackPayload(
       id: 'formal',
       toneLabel: '정중·공식 회신',
       subject: reSubject,
-      body: `안녕하세요, ${sender}님.\n\n보내주신 "${subject}" 관련 메일 및 첨부 자료 잘 받았습니다.\n${
+      body: `안녕하세요, ${sender}님.\n\n보내주신 "${subject}" 메일 확인했습니다.\n${
         customPrompt ? `${customPrompt}\n` : '요청하신 사항을 내부 검토한 후 조속히 확정 회신드리겠습니다.\n'
       }\n감사합니다.`,
     },
@@ -136,20 +190,21 @@ function buildClientFallbackPayload(
       id: 'concise',
       toneLabel: '간결·일정 조율 회신',
       subject: reSubject,
-      body: `${sender}님, 안녕하세요.\n\n"${subject}" 건 확인했습니다. 내부 검토를 거쳐 금주 내로 회신드리겠습니다.\n\n감사합니다.`,
+      body: `${sender}님, 안녕하세요.\n\n"${subject}" 건 확인했습니다. 내부 검토를 거쳐 회신드리겠습니다.\n\n감사합니다.`,
     },
   ];
 
   const translatedText =
     targetLang === 'en'
-      ? `[English Summary & Translation]\nSubject: ${subject}\nFrom: ${sender}\n\n${body.slice(0, 1200)}`
-      : `[한국어 요약·번역 해설]\n제목: ${subject}\n발신: ${sender}\n\n${summaryLines.join('\n')}\n\n--- 원문 주요 내용 ---\n${body.slice(0, 1200)}`;
+      ? `[English Preview]\nSubject: ${subject}\nFrom: ${sender}\n\n${body.slice(0, 1200)}`
+      : `[한국어 원문 발췌]\n제목: ${subject}\n발신: ${sender}\n\n${summaryLines.join('\n')}\n\n--- 원문 주요 내용 ---\n${body.slice(0, 1200)}`;
 
   return {
     model: 'deterministic-local',
-    modelLabel: '로컬 결정론적 엔진',
+    modelLabel: '오프라인 본문 발췌',
     tier: 'low',
     usedFallback: true,
+    fallbackReason,
     urgency: isUrgent ? 'high' : 'normal',
     drawings,
     deadlines,
@@ -167,6 +222,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
   email,
   onInsertReplyDraft,
   onAddCalendarEvent,
+  onOpenAiSettings,
   onClose,
 }) => {
   const [activeTab, setActiveTab] = useState<AiDockTab>('analyze');
@@ -175,7 +231,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
   const [customReplyDirective, setCustomReplyDirective] = useState('');
   const [targetLang, setTargetLang] = useState<'ko' | 'en' | 'ja' | 'zh'>('ko');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [autoAiOnSelect, setAutoAiOnSelect] = useState(false);
+  const [autoAiOnSelect, setAutoAiOnSelect] = useState(true);
 
   // Per-mail persistent Chat & Action states
   const [chatMap, setChatMap] = useState<Record<string, Array<{ role: 'user' | 'assistant'; content: string }>>>(() => {
@@ -232,14 +288,14 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
     async (
       targetEmail: MailItem,
       mode: AiDockTab,
-      options?: { prompt?: string; lang?: string; bypassCache?: boolean }
+      options?: { prompt?: string; lang?: string; bypassCache?: boolean; highPerformance?: boolean }
     ) => {
       const effectiveLang = options?.lang || targetLang;
       const cacheKey =
         mode === 'analyze' && !options?.prompt ? `${targetEmail.id}:${effectiveLang}` : '';
-      if (cacheKey && !options?.bypassCache) {
+      if (cacheKey && !options?.bypassCache && !options?.highPerformance) {
         const cached = readDockCache(cacheKey);
-        if (cached) {
+        if (cached && !cached.usedFallback) {
           setPayload(cached);
           return cached;
         }
@@ -250,7 +306,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
         options?.prompt,
         effectiveLang
       );
-      setPayload((prev) => prev || immediateFallback);
+      setPayload((prev) => (prev && !options?.bypassCache ? prev : immediateFallback));
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
@@ -258,30 +314,64 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
       abortControllerRef.current = ctrl;
       setLoading(true);
       try {
+        const slimEmail = {
+          id: targetEmail.id,
+          folder: targetEmail.folder,
+          subject: targetEmail.subject,
+          fromName: targetEmail.fromName,
+          fromEmail: targetEmail.fromEmail,
+          to: targetEmail.to,
+          date: targetEmail.date,
+          importance: targetEmail.importance,
+          snippet: targetEmail.snippet,
+          body: (targetEmail.body || targetEmail.snippet || '').slice(0, 6000),
+          attachments: (targetEmail.attachments || []).slice(0, 12).map((a) => ({
+            id: a.id,
+            filename: a.filename,
+            mimeType: a.mimeType,
+            kind: a.kind,
+          })),
+        };
         const res = await fetch('/api/local/mail/assistant', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: targetEmail,
+            email: slimEmail,
             mode,
             prompt: options?.prompt,
             targetLang: effectiveLang,
+            highPerformance: Boolean(options?.highPerformance),
           }),
           signal: ctrl.signal,
         });
         if (!res.ok) {
-          setPayload(immediateFallback);
-          return immediateFallback;
+          const errFallback = buildClientFallbackPayload(
+            targetEmail,
+            options?.prompt,
+            effectiveLang,
+            `로컬 분석 서버 응답 오류 (HTTP ${res.status})`
+          );
+          setPayload(errFallback);
+          return errFallback;
         }
         const data = (await res.json()) as AssistantPayload;
-        if (cacheKey) {
+        if (cacheKey && !data.usedFallback) {
           writeDockCache(cacheKey, data);
         }
         setPayload(data);
         return data;
-      } catch {
-        setPayload(immediateFallback);
-        return immediateFallback;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return immediateFallback;
+        }
+        const errFallback = buildClientFallbackPayload(
+          targetEmail,
+          options?.prompt,
+          effectiveLang,
+          err instanceof Error ? `AI 요청 실패: ${err.message}` : 'AI 분석 서버에 연결하지 못했습니다.'
+        );
+        setPayload(errFallback);
+        return errFallback;
       } finally {
         if (abortControllerRef.current === ctrl) {
           abortControllerRef.current = null;
@@ -300,26 +390,27 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
     }
     const cacheKey = `${email.id}:${targetLang}`;
     const cached = readDockCache(cacheKey);
-    if (cached) {
+    if (cached && !cached.usedFallback) {
       setPayload(cached);
       setLoading(false);
       return;
     }
     setPayload(buildClientFallbackPayload(email, undefined, targetLang));
-    setLoading(false);
     if (!autoAiOnSelect) {
+      setLoading(false);
       return;
     }
+    setLoading(true);
     const timer = window.setTimeout(() => {
       void runAssistant(email, 'analyze', { lang: targetLang });
-    }, 350);
+    }, 250);
     return () => {
       window.clearTimeout(timer);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [email?.id, targetLang, autoAiOnSelect]);
+  }, [email?.id, targetLang, autoAiOnSelect, runAssistant]);
 
   const currentAction: MailActionRecord = useMemo(() => {
     if (!email) {
@@ -383,6 +474,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
   }
 
   const effective = payload || buildClientFallbackPayload(email, undefined, targetLang);
+  const engineBadge = resolveAiEngineBadge(effective);
 
   return (
     <aside
@@ -394,35 +486,33 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
         <div className="flex items-center gap-1.5 min-w-0">
           <Sparkles className="w-4 h-4 text-[#0F6CBD] shrink-0" />
           <span className="text-xs font-bold text-[#242424] truncate">AI 분석</span>
-          <span className="px-1.5 py-0.5 rounded bg-[#EBF3FC] text-[#0F6CBD] text-[9.5px] font-semibold shrink-0">
-            고정
-          </span>
           <span
-            className={`px-1.5 py-0.5 rounded text-[10px] font-bold truncate ${
-              effective.tier === 'high'
-                ? 'bg-rose-100 text-rose-800'
-                : effective.tier === 'medium'
-                  ? 'bg-purple-100 text-purple-800'
-                  : 'bg-sky-100 text-[#0F6CBD]'
-            }`}
+            data-testid="ai-dock-engine-badge"
+            className={`px-1.5 py-0.5 rounded text-[10px] font-bold truncate ${engineBadge.className}`}
             title={effective.modelLabel}
           >
-            {effective.model.includes('opus')
-              ? 'Opus 5.5'
-              : effective.model.includes('sonnet')
-                ? 'Sonnet 5.5'
-                : effective.model.includes('haiku')
-                  ? 'Haiku 5.5'
-                  : '로컬 엔진'}
+            {loading ? '분석 중...' : engineBadge.label}
           </span>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
+            data-testid="btn-ai-dock-claude-deep"
+            disabled={loading}
+            onClick={() =>
+              void runAssistant(email, activeTab, { highPerformance: true, bypassCache: true })
+            }
+            title="Claude 5.5 정밀 모델로 본문·도면·리스크를 심층 재분석합니다"
+            className="px-1.5 py-0.5 rounded border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-[10px] font-bold transition-colors disabled:opacity-50"
+          >
+            Claude 정밀
+          </button>
+          <button
+            type="button"
             aria-pressed={autoAiOnSelect}
             onClick={() => setAutoAiOnSelect((prev) => !prev)}
-            title="메일 클릭 시 정밀 AI 분석 자동 호출 (기본 수동: 0ms 즉시 요약)"
+            title="메일 선택 시 Groq·Claude 실제 AI 자동 분석 켜기/끄기 (기본 켜짐)"
             className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold transition-colors ${
               autoAiOnSelect
                 ? 'bg-[#EBF3FC] border-[#B4D6FA] text-[#0F6CBD]'
@@ -434,7 +524,7 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
           <button
             type="button"
             disabled={loading}
-            onClick={() => void runAssistant(email, activeTab)}
+            onClick={() => void runAssistant(email, activeTab, { bypassCache: true })}
             title="AI 다시 분석"
             className="p-1 rounded hover:bg-slate-100 text-slate-600"
           >
@@ -488,6 +578,28 @@ export const MailAiDockPanel: React.FC<MailAiDockPanelProps> = ({
       <div className="flex-1 overflow-y-auto p-3 space-y-3 text-xs select-text">
         {activeTab === 'analyze' && (
           <>
+            {loading && (
+              <div className="px-2.5 py-2 rounded-lg bg-[#EBF3FC] border border-[#B4D6FA] text-[#0F6CBD] text-[11px] font-semibold flex items-center gap-2">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                <span>실제 AI(Groq · Claude)가 메일 본문을 정밀 분석 중입니다...</span>
+              </div>
+            )}
+            {!loading && effective.usedFallback && effective.fallbackReason && (
+              <div className="px-2.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-snug space-y-1.5">
+                <div>
+                  <strong className="font-bold">오프라인 발췌 표시 중:</strong> {effective.fallbackReason}
+                </div>
+                {onOpenAiSettings && (
+                  <button
+                    type="button"
+                    onClick={onOpenAiSettings}
+                    className="inline-flex items-center px-2 py-1 rounded bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 text-[10.5px] font-bold"
+                  >
+                    Claude API 설정 열기
+                  </button>
+                )}
+              </div>
+            )}
             <div className="p-2.5 rounded-lg bg-white border border-[#E0E0E0] space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-bold text-[#0F6CBD]">핵심 브리핑 요약</span>

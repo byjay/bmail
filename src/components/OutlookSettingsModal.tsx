@@ -5,6 +5,7 @@ import {
   Calendar,
   Check,
   Filter,
+  KeyRound,
   Layout,
   Mail,
   PenLine,
@@ -39,6 +40,7 @@ import {
   type OutlookUndoSendSeconds,
 } from '../utils/outlookWorkspaceModel';
 import type { ProjectDefinition } from '../utils/deterministicAnalyzer';
+import { ClaudeApiSettingsCard } from './ClaudeApiSettingsCard';
 
 interface OutlookSettingsModalProps {
   isOpen: boolean;
@@ -52,7 +54,7 @@ interface OutlookSettingsModalProps {
   isDiscoveringOutlookSettings?: boolean;
 }
 
-type PrimarySection = 'general' | 'mail' | 'calendar' | 'sedms';
+type PrimarySection = 'ai-api' | 'general' | 'mail' | 'calendar' | 'sedms';
 type MailSubSection = 'layout' | 'compose' | 'rules' | 'quicksteps' | 'categories' | 'oof' | 'junk';
 
 const FLUENT_INPUT_CLASS =
@@ -283,6 +285,7 @@ export const OutlookSettingsModal: React.FC<OutlookSettingsModalProps> = ({
   };
 
   const primaryNav: Array<{ id: PrimarySection; label: string; icon: React.ReactNode }> = [
+    { id: 'ai-api', label: 'AI · Claude API', icon: <KeyRound className="w-4 h-4 text-[#0F6CBD]" /> },
     { id: 'general', label: '일반', icon: <Sliders className="w-4 h-4" /> },
     { id: 'mail', label: '메일', icon: <Mail className="w-4 h-4" /> },
     { id: 'calendar', label: '일정', icon: <Calendar className="w-4 h-4" /> },
@@ -421,6 +424,19 @@ export const OutlookSettingsModal: React.FC<OutlookSettingsModalProps> = ({
 
           {/* Col 3: Detail Settings Canvas */}
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 bg-white">
+            {/* ==================== AI · CLAUDE API ==================== */}
+            {section === 'ai-api' && (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-[#242424]">AI · Claude API 연결 설정</h3>
+                  <p className="text-xs text-[#616161] mt-0.5">
+                    Groq API 없이도 Anthropic Claude API 키를 직접 입력하여 메일 분석·답안·검증 엔진으로 즉시 전환할 수 있습니다.
+                  </p>
+                </div>
+                <ClaudeApiSettingsCard compact />
+              </div>
+            )}
+
             {/* ==================== GENERAL ==================== */}
             {section === 'general' && (
               <>
